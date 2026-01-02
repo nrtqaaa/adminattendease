@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
+
+// 1. IMPORT ALL YOUR PAGES HERE
 import 'employeelist.dart';
 import 'leaverequest.dart';
-import 'leavebalance.dart'; // 1. IMPORT YOUR NEW PAGE
+import 'leavebalance.dart';
+import 'daily_attendance_view.dart';  // For Attendance
+import 'monthly_report.dart';         // For Reports
+import 'payslip_management.dart';     // For Payroll (Ensure class name matches)
+import 'system_config.dart';          // For Settings
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -11,18 +17,27 @@ class AdminDashboard extends StatefulWidget {
 }
 
 class _AdminDashboardState extends State<AdminDashboard> {
-  // Tracks the currently selected sidebar item
+  // This variable tracks which page is currently showing
   String _activePage = 'Dashboard';
 
-  // 2. SWITCH LOGIC: Renders the correct page based on selection
+  // 2. SWITCH LOGIC: Maps the sidebar names to the actual Pages
   Widget _buildMainContent() {
     switch (_activePage) {
       case 'Employees':
         return const EmployeeList();
+      case 'Attendance':
+        return const DailyAttendancePage(); // Linked to daily_attendance_view.dart
       case 'Leave Requests':
         return const LeaveRequestPage();
-      case 'Leave Balance': // New Case
-        return const LeaveBalancePage(); 
+      case 'Leave Balance':
+        return const LeaveBalancePage();
+      case 'Reports':
+        return const MonthlyReportPage();   // Linked to monthly_report.dart
+      case 'Payroll':
+        // NOTE: Ensure your payslip_management.dart has a class named PayslipManagementPage
+        return const PayslipManagementPage(); 
+      case 'Settings':
+        return const SystemConfigurationPage(); // Linked to system_config.dart
       case 'Dashboard':
       default:
         return _dashboardView();
@@ -41,7 +56,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             child: Column(
               children: [
                 const SizedBox(height: 40),
-                // App Logo / Title
+                // Logo Area
                 const ListTile(
                   leading: Icon(Icons.business_center, color: Colors.white),
                   title: Text(
@@ -51,12 +66,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 ),
                 const SizedBox(height: 20),
                 
-                // Sidebar Navigation Items
+                // 3. SIDEBAR BUTTONS (Must match the 'case' names above exactly)
                 _navItem(Icons.home, 'Dashboard'),
                 _navItem(Icons.people, 'Employees'),
                 _navItem(Icons.access_time, 'Attendance'),
                 _navItem(Icons.calendar_today, 'Leave Requests'),
-                // 3. NEW BUTTON: Added Leave Balance to the menu
                 _navItem(Icons.account_balance_wallet, 'Leave Balance'),
                 _navItem(Icons.assignment, 'Reports'),
                 _navItem(Icons.attach_money, 'Payroll'),
@@ -73,7 +87,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           Expanded(
             child: Container(
               color: const Color(0xFFE5EAEF), // Light Grey Background
-              child: _buildMainContent(), // Displays the selected widget
+              child: _buildMainContent(), // This renders the page selected in the switch
             ),
           ),
         ],
@@ -96,7 +110,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       ),
       onTap: () {
         setState(() {
-          _activePage = title; // Updates state to trigger rebuild
+          _activePage = title; // This triggers the screen update
         });
       },
     );
@@ -113,7 +127,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           const Text('Welcome back, Admin', style: TextStyle(color: Colors.grey)),
           const SizedBox(height: 32),
           
-          // 4 Summary Cards
+          // Summary Cards
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -137,15 +151,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 _leaveItem('Alice Wong', 'Annual Leave', 'Dec 15 - 17'),
                 _leaveItem('Husna Aqilah', 'Sick Leave', 'Dec 10'),
                 _leaveItem('Amir Hazim', 'Personal Leave', 'Dec 20 - 21'),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ElevatedButton(onPressed: () {}, child: const Text('Claim History')),
-                    const SizedBox(width: 16),
-                    ElevatedButton(onPressed: () {}, child: const Text('Claim Request')),
-                  ],
-                )
               ],
             ),
           ),
@@ -154,7 +159,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  // Helper for Summary Cards
   Widget _statCard(String val, String label, IconData icon, Color color) {
     return Container(
       width: 150, padding: const EdgeInsets.all(16),
@@ -163,7 +167,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  // Helper for Pending Leave Items
   Widget _leaveItem(String name, String type, String date) {
     return ListTile(
       title: Text(name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
