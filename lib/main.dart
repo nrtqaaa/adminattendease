@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
-// Import your page files
+// Import your page files - Ensure these paths match your folder structure exactly
 import 'admin/login/pages/dashboard.dart'; 
 import 'admin/login/pages/register.dart'; 
 import 'admin/login/pages/forgotpassword.dart';
-import 'admin/login/pages/manual_attendance.dart'; // <--- Added this import
+import 'admin/login/pages/manual_attendance.dart'; 
+import 'admin/login/pages/company_setting.dart'; // Verified import
 
 void main() {
   runApp(const MyApp());
@@ -21,11 +22,12 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primaryColor: const Color(0xFF0B1D4D),
         scaffoldBackgroundColor: const Color(0xFFF0F4F7),
-        // Applying a consistent font style across the app
-        fontFamily: 'Inter', 
+        fontFamily: 'Inter', // Consistent typography
       ),
-      // The app starts at the Login Page
-      home: const LoginPage(),
+      // --- TESTING MODE ---
+      // Swap the comments below to switch which page opens first
+      home: const LoginPage(), 
+      // home: const CompanySettingsPage(), 
     );
   }
 }
@@ -58,10 +60,13 @@ class _LoginPageState extends State<LoginPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Logo
-                Image.asset('assets/datasolutions_logo.jpg', height: 50,
-                    errorBuilder: (context, error, stackTrace) => 
-                    const Icon(Icons.business, size: 50, color: Color(0xFF0B1D4D))),
+                // Logo Section
+                Image.asset(
+                  'assets/datasolutions_logo.jpg', 
+                  height: 50,
+                  errorBuilder: (context, error, stackTrace) => 
+                      const Icon(Icons.business, size: 50, color: Color(0xFF0B1D4D)),
+                ),
                 const SizedBox(height: 20),
                 const Text('Sign in Your Account', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
                 const SizedBox(height: 30),
@@ -74,10 +79,12 @@ class _LoginPageState extends State<LoginPage> {
                 _buildTextField(obscure: true),
                 const SizedBox(height: 10),
                 
+                // Remember Me & Forgot Password
                 Row(
                   children: [
                     Checkbox(
                       value: rememberMe,
+                      activeColor: const Color(0xFF0B1D4D),
                       onChanged: (value) => setState(() => rememberMe = value!),
                     ),
                     const Text('Remember my preference', style: TextStyle(fontSize: 13)),
@@ -106,9 +113,10 @@ class _LoginPageState extends State<LoginPage> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF0B1D4D),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      elevation: 2,
                     ),
                     onPressed: () {
-                      // Navigate to the Dashboard which now contains your Manual Attendance
+                      // Navigate to AdminDashboard
                       Navigator.pushReplacement(
                         context, 
                         MaterialPageRoute(builder: (context) => const AdminDashboard())
@@ -119,20 +127,21 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 const SizedBox(height: 20),
                 
+                // Registration Link
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const Text("Don't have an account? ", style: TextStyle(fontSize: 14)),
-                    MouseRegion(
-                      cursor: SystemMouseCursors.click,
-                      child: GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => const RegisterPage()),
-                          );
-                        },
-                        child: const Text(
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const RegisterPage()),
+                        );
+                      },
+                      child: const MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: Text(
                           'Sign up',
                           style: TextStyle(
                             color: Colors.blue,

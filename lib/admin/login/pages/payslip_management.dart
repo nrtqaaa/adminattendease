@@ -8,43 +8,85 @@ class PayslipManagementPage extends StatefulWidget {
 }
 
 class _PayslipManagementPageState extends State<PayslipManagementPage> {
-  // 1. Master list of all payroll data
+  // 1. Master list of data
   final List<Map<String, String>> _allPayrollData = [
     {"name": "Hani Syakirah", "id": "EMP001", "dept": "IT", "month": "November", "basic": "RM 5,000", "net": "RM 5,000", "status": "PENDING"},
     {"name": "Alice Wong", "id": "EMP002", "dept": "IT", "month": "November", "basic": "RM 5,000", "net": "RM 5,000", "status": "PAID"},
     {"name": "Husna Aqilah", "id": "EMP003", "dept": "Marketing", "month": "November", "basic": "RM 5,000", "net": "RM 5,000", "status": "PAID"},
     {"name": "Amir Amzah", "id": "EMP004", "dept": "Marketing", "month": "November", "basic": "RM 5,000", "net": "RM 5,000", "status": "PAID"},
     {"name": "Alam Ikmal", "id": "EMP005", "dept": "HR", "month": "November", "basic": "RM 5,000", "net": "RM 5,000", "status": "PAID"},
-    {"name": "Amir Amzah", "id": "EMP006", "dept": "Sales", "month": "November", "basic": "RM 5,000", "net": "RM 5,000", "status": "PAID"},
-    {"name": "Alam Ikmal", "id": "EMP007", "dept": "Sales", "month": "November", "basic": "RM 5,000", "net": "RM 5,000", "status": "PAID"},
   ];
 
-  // 2. List that will be displayed (filtered results)
   List<Map<String, String>> _filteredData = [];
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    // Initially, the filtered list is the same as the full list
-    _filteredData = _allPayrollData;
+    _filteredData = List.from(_allPayrollData);
   }
 
-  // 3. Search logic
+  // Logic: Search Filter
   void _runFilter(String enteredKeyword) {
-    List<Map<String, String>> results = [];
-    if (enteredKeyword.isEmpty) {
-      results = _allPayrollData;
-    } else {
-      results = _allPayrollData
-          .where((user) =>
-              user["name"]!.toLowerCase().contains(enteredKeyword.toLowerCase()) ||
-              user["id"]!.toLowerCase().contains(enteredKeyword.toLowerCase()))
-          .toList();
-    }
-
     setState(() {
-      _filteredData = results;
+      if (enteredKeyword.isEmpty) {
+        _filteredData = List.from(_allPayrollData);
+      } else {
+        _filteredData = _allPayrollData
+            .where((user) =>
+                user["name"]!.toLowerCase().contains(enteredKeyword.toLowerCase()) ||
+                user["id"]!.toLowerCase().contains(enteredKeyword.toLowerCase()))
+            .toList();
+      }
     });
+  }
+
+  // Logic: Update the Status in the master list
+  void _handleStatusChange(String id, String newStatus) {
+    setState(() {
+      // Update master list
+      final index = _allPayrollData.indexWhere((item) => item["id"] == id);
+      if (index != -1) {
+        _allPayrollData[index]["status"] = newStatus;
+      }
+      // Re-apply filter to keep the view consistent
+      _runFilter(_searchController.text);
+    });
+  }
+
+  // UI: Action Dialog
+  void _showEditAction(Map<String, String> item) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text("Edit Status: ${item['name']}"),
+          content: Text("Change payment status for ${item['month']}?"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("CANCEL"),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+              onPressed: () {
+                _handleStatusChange(item["id"]!, "PENDING");
+                Navigator.pop(context);
+              },
+              child: const Text("SET PENDING", style: TextStyle(color: Colors.white)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+              onPressed: () {
+                _handleStatusChange(item["id"]!, "PAID");
+                Navigator.pop(context);
+              },
+              child: const Text("SET PAID", style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -58,76 +100,58 @@ class _PayslipManagementPageState extends State<PayslipManagementPage> {
           const Text("Welcome back, Admin", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
           const SizedBox(height: 24),
 
-          // SEARCH BAR SECTION
+          // Search Bar
           _buildSearchInput("Search by name or employee ID"),
           const SizedBox(height: 24),
 
-          // PAYROLL TABLE
-          _buildTableHeader(["Employee", "Department", "Month", "Basic Salary", "Net Salary", "Status", "Action"]),
+          // Header
+          _buildTableHeader(["Employee", "Department", "Month", "Basic", "Net", "Status", "Action"]),
+
+          // Table Body
           Expanded(
             child: _filteredData.isNotEmpty
                 ? ListView.builder(
                     itemCount: _filteredData.length,
-                    itemBuilder: (context, index) {
-                      final item = _filteredData[index];
-                      return _buildPayrollRow(
-                        item["name"]!,
-                        item["id"]!,
-                        item["dept"]!,
-                        item["month"]!,
-                        item["basic"]!,
-                        item["net"]!,
-                        item["status"]!,
-                      );
-                    },
+                    itemBuilder: (context, index) => _buildPayrollRow(_filteredData[index]),
                   )
-                : const Center(child: Text("No results found", style: TextStyle(fontSize: 18))),
+                : const Center(child: Text("No results found")),
           ),
         ],
       ),
     );
   }
 
-  // UPDATED SEARCH BAR BUILDER
   Widget _buildSearchInput(String hint) {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE8EAF6),
-        border: Border.all(color: Colors.black26),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFFE8EAF6), borderRadius: BorderRadius.circular(4)),
       child: TextField(
-        onChanged: (value) => _runFilter(value), // Trigger the filter
+        controller: _searchController,
+        onChanged: _runFilter,
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: const TextStyle(color: Colors.grey, fontStyle: FontStyle.italic, fontSize: 13),
+          prefixIcon: const Icon(Icons.search),
           border: InputBorder.none,
-          icon: const Icon(Icons.search, size: 20, color: Colors.grey),
+          contentPadding: const EdgeInsets.symmetric(vertical: 15),
         ),
       ),
     );
   }
 
-  // TABLE HEADER BUILDER (Same as yours)
   Widget _buildTableHeader(List<String> labels) {
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: const BoxDecoration(color: Color(0xFFA7BBC7)),
+      color: const Color(0xFFA7BBC7),
       child: Row(
-        children: labels
-            .map((l) => Expanded(
-                  child: Text(l, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-                ))
-            .toList(),
+        children: labels.map((l) => Expanded(child: Text(l, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)))).toList(),
       ),
     );
   }
 
-  // DATA ROW BUILDER (Same as yours)
-  Widget _buildPayrollRow(String name, String id, String dept, String month, String basic, String net, String status) {
+  Widget _buildPayrollRow(Map<String, String> item) {
+    bool isPaid = item["status"] == "PAID";
+
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
       decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Colors.black12))),
       child: Row(
         children: [
@@ -135,20 +159,25 @@ class _PayslipManagementPageState extends State<PayslipManagementPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                Text(id, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                Text(item["name"]!, style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text(item["id"]!, style: const TextStyle(fontSize: 11, color: Colors.grey)),
               ],
             ),
           ),
-          Expanded(child: Text(dept, style: const TextStyle(fontWeight: FontWeight.bold))),
-          Expanded(child: Text(month, style: const TextStyle(fontWeight: FontWeight.bold))),
-          Expanded(child: Text(basic, style: const TextStyle(fontWeight: FontWeight.bold))),
-          Expanded(child: Text(net, style: const TextStyle(fontWeight: FontWeight.bold))),
-          Expanded(child: Text(status, style: const TextStyle(fontWeight: FontWeight.bold))),
-          const Expanded(
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Icon(Icons.edit_note, size: 28),
+          Expanded(child: Text(item["dept"]!)),
+          Expanded(child: Text(item["month"]!)),
+          Expanded(child: Text(item["basic"]!)),
+          Expanded(child: Text(item["net"]!)),
+          Expanded(
+            child: Text(
+              item["status"]!,
+              style: TextStyle(color: isPaid ? Colors.green : Colors.orange, fontWeight: FontWeight.bold),
+            ),
+          ),
+          Expanded(
+            child: IconButton(
+              icon: const Icon(Icons.edit_note, color: Colors.blue),
+              onPressed: () => _showEditAction(item), // Functionality starts here
             ),
           ),
         ],
