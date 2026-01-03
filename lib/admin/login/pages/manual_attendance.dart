@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // 1. Add Firestore
 
 class ManualAttendancePage extends StatefulWidget {
   const ManualAttendancePage({super.key});
@@ -8,35 +9,85 @@ class ManualAttendancePage extends StatefulWidget {
 }
 
 class _ManualAttendancePageState extends State<ManualAttendancePage> {
-  // Controllers for all form fields
   final TextEditingController _idController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _dateController = TextEditingController();
   final TextEditingController _inTimeController = TextEditingController();
   final TextEditingController _outTimeController = TextEditingController();
 
-  // Logic: Calculate Duration
-  String _calculateDuration() {
-    if (_inTimeController.text.isEmpty || _outTimeController.text.isEmpty) {
-      return "0h 0m";
+  bool _isSearching = false;
+
+  // 2. LOGIC: Auto-fill Name from Employee ID
+  Future<void> _lookupEmployee(String id) async {
+    if (id.length < 3) return; // Wait for a few characters
+    setState(() => _isSearching = true);
+    
+    try {
+      var doc = await FirebaseFirestore.instance.collection('employees').doc(id).get();
+      if (doc.exists) {
+        setState(() {
+          _nameController.text = doc.data()?['name'] ?? "";
+        });
+      }
+    } finally {
+      setState(() => _isSearching = false);
+    }
+  }
+
+  // 3. LOGIC: Save to Firebase
+  Future<void> _handleSave() async {
+    if (_idController.text.isEmpty || _nameController.text.isEmpty || _dateController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please fill in required fields"), backgroundColor: Colors.orange),
+      );
+      return;
     }
 
     try {
+      await FirebaseFirestore.instance.collection('manual_attendance').add({
+        'employeeId': _idController.text,
+        'name': _nameController.text,
+        'date': _dateController.text,
+        'clockIn': _inTimeController.text,
+        'clockOut': _outTimeController.text,
+        'duration': _calculateDuration(),
+        'createdAt': FieldValue.serverTimestamp(),
+        'addedBy': 'Admin', // You can replace this with actual logged-in admin name
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Attendance record saved to database!"), backgroundColor: Colors.green),
+        );
+        _clearForm();
+      }
+    } catch (e) {
+      debugPrint("Save failed: $e");
+    }
+  }
+
+  void _clearForm() {
+    setState(() {
+      _idController.clear();
+      _nameController.clear();
+      _dateController.clear();
+      _inTimeController.clear();
+      _outTimeController.clear();
+    });
+  }
+
+  // --- EXISTING DURATION LOGIC ---
+  String _calculateDuration() {
+    if (_inTimeController.text.isEmpty || _outTimeController.text.isEmpty) return "0h 0m";
+    try {
       TimeOfDay inTime = _parseTimeString(_inTimeController.text);
       TimeOfDay outTime = _parseTimeString(_outTimeController.text);
-
       int inMinutes = inTime.hour * 60 + inTime.minute;
       int outMinutes = outTime.hour * 60 + outTime.minute;
-
-      if (outMinutes <= inMinutes) {
-        outMinutes += 24 * 60; // Handle overnight shifts
-      }
-
+      if (outMinutes <= inMinutes) outMinutes += 24 * 60;
       int diff = outMinutes - inMinutes;
       return "${diff ~/ 60}h ${diff % 60}m";
-    } catch (e) {
-      return "0h 0m";
-    }
+    } catch (e) { return "0h 0m"; }
   }
 
   TimeOfDay _parseTimeString(String timeStr) {
@@ -53,7 +104,7 @@ class _ManualAttendancePageState extends State<ManualAttendancePage> {
     return TimeOfDay.now();
   }
 
-  // Pickers
+  // --- PICKERS ---
   Future<void> _selectDate() async {
     DateTime? picked = await showDatePicker(
       context: context,
@@ -62,9 +113,7 @@ class _ManualAttendancePageState extends State<ManualAttendancePage> {
       lastDate: DateTime(2100),
     );
     if (picked != null) {
-      setState(() {
-        _dateController.text = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
-      });
+      setState(() => _dateController.text = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}");
     }
   }
 
@@ -73,18 +122,6 @@ class _ManualAttendancePageState extends State<ManualAttendancePage> {
     if (picked != null) {
       setState(() => controller.text = picked.format(context));
     }
-  }
-
-  void _handleSave() {
-    if (_idController.text.isEmpty || _nameController.text.isEmpty || _dateController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please fill in Employee ID, Name, and Date"), backgroundColor: Colors.orange),
-      );
-      return;
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Attendance record added successfully!"), backgroundColor: Colors.green),
-    );
   }
 
   @override
@@ -96,7 +133,7 @@ class _ManualAttendancePageState extends State<ManualAttendancePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text("Attendance / Manual Attendance", style: TextStyle(fontSize: 16, color: Colors.grey)),
+            const Text("Attendance / Manual Entry", style: TextStyle(fontSize: 16, color: Colors.grey)),
             const SizedBox(height: 24),
 
             Container(
@@ -113,18 +150,27 @@ class _ManualAttendancePageState extends State<ManualAttendancePage> {
                   const Text("Manual Attendance Entry Form", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF0B1D4D))),
                   const Divider(height: 40),
 
-                  // EMPLOYEE INFO SECTION
-                  const Text("EMPLOYEE INFORMATION", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.1, color: Colors.blueGrey)),
+                  const Text("EMPLOYEE INFORMATION", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
                   const SizedBox(height: 20),
-                  _buildFormRow("Employee ID:", _buildTextField(_idController, "e.g. EMP001")),
-                  _buildFormRow("Full Name:", _buildTextField(_nameController, "Enter employee full name")),
+                  
+                  // ID Field with Auto-fill Trigger
+                  _buildFormRow("Employee ID:", TextField(
+                    controller: _idController,
+                    onChanged: _lookupEmployee,
+                    decoration: InputDecoration(
+                      hintText: "e.g. EMP001",
+                      suffixIcon: _isSearching ? const SizedBox(width: 20, height: 20, child: Padding(padding: EdgeInsets.all(10), child: CircularProgressIndicator(strokeWidth: 2))) : null,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  )),
+
+                  _buildFormRow("Full Name:", _buildTextField(_nameController, "Name will auto-fill", readOnly: true)),
 
                   const SizedBox(height: 20),
                   const Divider(),
                   const SizedBox(height: 20),
 
-                  // ATTENDANCE INFO SECTION
-                  const Text("ATTENDANCE DETAILS", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.1, color: Colors.blueGrey)),
+                  const Text("ATTENDANCE DETAILS", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
                   const SizedBox(height: 20),
                   _buildFormRow("Date:", _buildPickerField(_dateController, "Select Date", Icons.calendar_today, _selectDate)),
                   _buildFormRow("Clock-In:", _buildPickerField(_inTimeController, "Select Time", Icons.access_time, () => _selectTime(_inTimeController))),
@@ -132,50 +178,20 @@ class _ManualAttendancePageState extends State<ManualAttendancePage> {
 
                   const SizedBox(height: 30),
                   
-                  // DURATION BOX
-                  Row(
-                    children: [
-                      const SizedBox(width: 150),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE3F2FD),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.blue.shade200),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.timer_outlined, color: Color(0xFF0B1D4D), size: 20),
-                            const SizedBox(width: 10),
-                            const Text("Total Duration: ", style: TextStyle(fontWeight: FontWeight.w500)),
-                            Text(_calculateDuration(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF0B1D4D))),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+                  // Duration Display
+                  Center(child: _buildDurationBadge()),
                 ],
               ),
             ),
 
             const SizedBox(height: 40),
 
-            // ACTIONS
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 _buildActionButton("ADD RECORD", const Color(0xFF0B1D4D), _handleSave),
                 const SizedBox(width: 20),
-                _buildActionButton("CLEAR FORM", Colors.red.shade900, () {
-                  setState(() {
-                    _idController.clear();
-                    _nameController.clear();
-                    _dateController.clear();
-                    _inTimeController.clear();
-                    _outTimeController.clear();
-                  });
-                }),
+                _buildActionButton("CLEAR FORM", Colors.red.shade900, _clearForm),
               ],
             )
           ],
@@ -184,8 +200,7 @@ class _ManualAttendancePageState extends State<ManualAttendancePage> {
     );
   }
 
-  // --- FORM HELPERS ---
-
+  // --- HELPERS ---
   Widget _buildFormRow(String label, Widget input) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -193,19 +208,21 @@ class _ManualAttendancePageState extends State<ManualAttendancePage> {
         children: [
           SizedBox(width: 150, child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold))),
           Expanded(child: input),
-          const Spacer(flex: 2),
+          const Spacer(flex: 1),
         ],
       ),
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String hint) {
+  Widget _buildTextField(TextEditingController controller, String hint, {bool readOnly = false}) {
     return TextField(
       controller: controller,
+      readOnly: readOnly,
       decoration: InputDecoration(
         hintText: hint,
+        filled: readOnly,
+        fillColor: readOnly ? Colors.grey[100] : null,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
       ),
     );
   }
@@ -219,22 +236,37 @@ class _ManualAttendancePageState extends State<ManualAttendancePage> {
         hintText: hint,
         prefixIcon: Icon(icon, color: const Color(0xFF0B1D4D)),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+      ),
+    );
+  }
+
+  Widget _buildDurationBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE3F2FD),
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.timer_outlined, color: Color(0xFF0B1D4D), size: 20),
+          const SizedBox(width: 10),
+          const Text("Calculated Shift: ", style: TextStyle(fontWeight: FontWeight.w500)),
+          Text(_calculateDuration(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF0B1D4D))),
+        ],
       ),
     );
   }
 
   Widget _buildActionButton(String label, Color color, VoidCallback onTap) {
     return SizedBox(
-      width: 200,
-      height: 55,
+      width: 200, height: 50,
       child: ElevatedButton(
         onPressed: onTap,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: color,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-        child: Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+        style: ElevatedButton.styleFrom(backgroundColor: color, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+        child: Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       ),
     );
   }

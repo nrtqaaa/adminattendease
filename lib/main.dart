@@ -1,185 +1,137 @@
+import 'package:adminattendease/admin/login/pages/daily_attendance_view.dart';
+import 'package:adminattendease/admin/login/pages/leavebalance.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'firebase_options.dart';
 
-// Import your page files - Ensure these paths match your folder structure exactly
+// Import your pages
+import 'admin/login/pages/login.dart'; 
+import 'admin/login/pages/register.dart';
 import 'admin/login/pages/dashboard.dart'; 
-import 'admin/login/pages/register.dart'; 
-import 'admin/login/pages/forgotpassword.dart';
-import 'admin/login/pages/manual_attendance.dart'; 
-import 'admin/login/pages/company_setting.dart'; // Verified import
+import 'admin/login/pages/employeelist.dart';
+import 'admin/login/pages/manual_attendance.dart';
+import 'admin/login/pages/leaverequest.dart';
+import 'admin/login/pages/claim_management.dart';
+import 'admin/login/pages/payslip_management.dart'; 
+import 'admin/login/pages/monthly_report.dart';
+import 'admin/login/pages/system_config.dart';
 
-void main() {
-  runApp(const MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  runApp(const AttendEaseApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class AttendEaseApp extends StatelessWidget {
+  const AttendEaseApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'AttendEase System',
+      title: 'AttendEase Admin',
       theme: ThemeData(
         primaryColor: const Color(0xFF0B1D4D),
-        scaffoldBackgroundColor: const Color(0xFFF0F4F7),
-        fontFamily: 'Inter', // Consistent typography
+        fontFamily: 'Inter',
+        useMaterial3: true,
       ),
-      // --- TESTING MODE ---
-      // Swap the comments below to switch which page opens first
-      home: const LoginPage(), 
-      // home: const CompanySettingsPage(), 
+      home: const AuthWrapper(),
     );
   }
 }
 
-class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
+
   @override
-  State<LoginPage> createState() => _LoginPageState();
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
+        if (snapshot.hasData) {
+          return const AdminDashboard();
+        }
+        return const LoginPage(); // Shows professional login by default
+      },
+    );
+  }
 }
 
-class _LoginPageState extends State<LoginPage> {
-  bool rememberMe = false;
+class AdminDashboard extends StatefulWidget {
+  const AdminDashboard({super.key});
+
+  @override
+  State<AdminDashboard> createState() => _AdminDashboardState();
+}
+
+class _AdminDashboardState extends State<AdminDashboard> {
+  int _selectedIndex = 0;
+
+  // Sync these indices exactly with the NavigationRail below
+  final List<Widget> _pages = [
+    const AdminDashboard(),
+    const EmployeeList(),          // 1
+    const DailyAttendancePage(),
+    const ManualAttendancePage(),  // 2
+    const LeaveRequestPage(),      // 3
+    const LeaveBalancePage(), 
+    const ClaimManagementPage(),   // 4
+    const PayslipManagementPage(), // 5
+    const MonthlyReportPage(),     // 6
+    const SystemConfigPage(),      // 7
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFEFF4F7),
-      body: Center(
-        child: SingleChildScrollView(
-          child: Container(
-            width: 420,
-            padding: const EdgeInsets.all(40),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: const [
-                BoxShadow(color: Colors.black12, blurRadius: 15, offset: Offset(0, 5)),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Logo Section
-                Image.asset(
-                  'assets/datasolutions_logo.jpg', 
-                  height: 50,
-                  errorBuilder: (context, error, stackTrace) => 
-                      const Icon(Icons.business, size: 50, color: Color(0xFF0B1D4D)),
-                ),
-                const SizedBox(height: 20),
-                const Text('Sign in Your Account', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
-                const SizedBox(height: 30),
-                
-                _buildLabel('Email'),
-                _buildTextField(),
-                const SizedBox(height: 20),
-                
-                _buildLabel('Password'),
-                _buildTextField(obscure: true),
-                const SizedBox(height: 10),
-                
-                // Remember Me & Forgot Password
-                Row(
-                  children: [
-                    Checkbox(
-                      value: rememberMe,
-                      activeColor: const Color(0xFF0B1D4D),
-                      onChanged: (value) => setState(() => rememberMe = value!),
-                    ),
-                    const Text('Remember my preference', style: TextStyle(fontSize: 13)),
-                    const Spacer(),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context, 
-                          MaterialPageRoute(builder: (context) => const ForgotPasswordPage())
-                        );
-                      }, 
-                      child: const Text(
-                        'Forgot Password?', 
-                        style: TextStyle(fontSize: 13, color: Color(0xFF5C6BC0))
-                      )
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                
-                // SIGN IN BUTTON
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0B1D4D),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      elevation: 2,
-                    ),
-                    onPressed: () {
-                      // Navigate to AdminDashboard
-                      Navigator.pushReplacement(
-                        context, 
-                        MaterialPageRoute(builder: (context) => const AdminDashboard())
-                      );
-                    },
-                    child: const Text('Sign In', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+      body: Row(
+        children: [
+          NavigationRail(
+            extended: true,
+            minExtendedWidth: 200,
+            backgroundColor: const Color(0xFF0B1D4D),
+            unselectedIconTheme: const IconThemeData(color: Colors.white60),
+            selectedIconTheme: const IconThemeData(color: Colors.white),
+            unselectedLabelTextStyle: const TextStyle(color: Colors.white60),
+            selectedLabelTextStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            destinations: const [
+              NavigationRailDestination(icon: Icon(Icons.dashboard), label: Text('Dashboard')),
+              NavigationRailDestination(icon: Icon(Icons.people), label: Text('Employees')),
+              NavigationRailDestination(icon: Icon(Icons.punch_clock_outlined), label: Text('Attendance')),
+               NavigationRailDestination(icon: Icon(Icons.punch_clock_outlined), label: Text('Manual')),
+              NavigationRailDestination(icon: Icon(Icons.calendar_month), label: Text('Leaves Requests')),
+              NavigationRailDestination(icon: Icon(Icons.account_balance), label: Text('Leave Balance')),
+              NavigationRailDestination(icon: Icon(Icons.payments), label: Text('Claims')),
+              NavigationRailDestination(icon: Icon(Icons.account_balance_wallet), label: Text('Payroll')),
+              NavigationRailDestination(icon: Icon(Icons.bar_chart), label: Text('Reports')),
+              NavigationRailDestination(icon: Icon(Icons.settings), label: Text('Settings')),
+            ],
+            selectedIndex: _selectedIndex,
+            onDestinationSelected: (index) => setState(() => _selectedIndex = index),
+            trailing: Expanded(
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 20.0),
+                  child: IconButton(
+                    icon: const Icon(Icons.logout, color: Colors.white70),
+                    onPressed: () => FirebaseAuth.instance.signOut(),
                   ),
                 ),
-                const SizedBox(height: 20),
-                
-                // Registration Link
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text("Don't have an account? ", style: TextStyle(fontSize: 14)),
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const RegisterPage()),
-                        );
-                      },
-                      child: const MouseRegion(
-                        cursor: SystemMouseCursors.click,
-                        child: Text(
-                          'Sign up',
-                          style: TextStyle(
-                            color: Colors.blue,
-                            fontWeight: FontWeight.bold,
-                            decoration: TextDecoration.underline,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLabel(String label) {
-    return Align(
-      alignment: Alignment.centerLeft, 
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 8), 
-        child: Text(label, style: const TextStyle(fontWeight: FontWeight.w500))
-      )
-    );
-  }
-
-  Widget _buildTextField({bool obscure = false}) {
-    return Container(
-      decoration: BoxDecoration(color: const Color(0xFFF0F2F5), borderRadius: BorderRadius.circular(8)),
-      child: TextField(
-        obscureText: obscure, 
-        decoration: const InputDecoration(
-          border: InputBorder.none, 
-          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14)
-        )
+          Expanded(
+            child: IndexedStack(
+              index: _selectedIndex,
+              children: _pages,
+            ),
+          ),
+        ],
       ),
     );
   }

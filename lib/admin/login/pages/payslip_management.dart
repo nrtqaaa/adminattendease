@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class PayslipManagementPage extends StatefulWidget {
   const PayslipManagementPage({super.key});
@@ -8,84 +9,54 @@ class PayslipManagementPage extends StatefulWidget {
 }
 
 class _PayslipManagementPageState extends State<PayslipManagementPage> {
-  // 1. Master list of data
-  final List<Map<String, String>> _allPayrollData = [
-    {"name": "Hani Syakirah", "id": "EMP001", "dept": "IT", "month": "November", "basic": "RM 5,000", "net": "RM 5,000", "status": "PENDING"},
-    {"name": "Alice Wong", "id": "EMP002", "dept": "IT", "month": "November", "basic": "RM 5,000", "net": "RM 5,000", "status": "PAID"},
-    {"name": "Husna Aqilah", "id": "EMP003", "dept": "Marketing", "month": "November", "basic": "RM 5,000", "net": "RM 5,000", "status": "PAID"},
-    {"name": "Amir Amzah", "id": "EMP004", "dept": "Marketing", "month": "November", "basic": "RM 5,000", "net": "RM 5,000", "status": "PAID"},
-    {"name": "Alam Ikmal", "id": "EMP005", "dept": "HR", "month": "November", "basic": "RM 5,000", "net": "RM 5,000", "status": "PAID"},
-  ];
-
-  List<Map<String, String>> _filteredData = [];
   final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = "";
 
-  @override
-  void initState() {
-    super.initState();
-    _filteredData = List.from(_allPayrollData);
-  }
-
-  // Logic: Search Filter
-  void _runFilter(String enteredKeyword) {
-    setState(() {
-      if (enteredKeyword.isEmpty) {
-        _filteredData = List.from(_allPayrollData);
-      } else {
-        _filteredData = _allPayrollData
-            .where((user) =>
-                user["name"]!.toLowerCase().contains(enteredKeyword.toLowerCase()) ||
-                user["id"]!.toLowerCase().contains(enteredKeyword.toLowerCase()))
-            .toList();
+  // Logic: Update Status in Firestore
+  Future<void> _updateStatus(String docId, String newStatus) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('payroll')
+          .doc(docId)
+          .update({'status': newStatus});
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Status updated to $newStatus")),
+        );
       }
-    });
-  }
-
-  // Logic: Update the Status in the master list
-  void _handleStatusChange(String id, String newStatus) {
-    setState(() {
-      // Update master list
-      final index = _allPayrollData.indexWhere((item) => item["id"] == id);
-      if (index != -1) {
-        _allPayrollData[index]["status"] = newStatus;
-      }
-      // Re-apply filter to keep the view consistent
-      _runFilter(_searchController.text);
-    });
+    } catch (e) {
+      debugPrint("Update failed: $e");
+    }
   }
 
   // UI: Action Dialog
-  void _showEditAction(Map<String, String> item) {
+  void _showEditAction(String docId, String name, String month) {
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text("Edit Status: ${item['name']}"),
-          content: Text("Change payment status for ${item['month']}?"),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("CANCEL"),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-              onPressed: () {
-                _handleStatusChange(item["id"]!, "PENDING");
-                Navigator.pop(context);
-              },
-              child: const Text("SET PENDING", style: TextStyle(color: Colors.white)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-              onPressed: () {
-                _handleStatusChange(item["id"]!, "PAID");
-                Navigator.pop(context);
-              },
-              child: const Text("SET PAID", style: TextStyle(color: Colors.white)),
-            ),
-          ],
-        );
-      },
+      builder: (context) => AlertDialog(
+        title: Text("Edit Status: $name"),
+        content: Text("Change payment status for $month?"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            onPressed: () {
+              _updateStatus(docId, "PENDING");
+              Navigator.pop(context);
+            },
+            child: const Text("SET PENDING", style: TextStyle(color: Colors.white)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            onPressed: () {
+              _updateStatus(docId, "PAID");
+              Navigator.pop(context);
+            },
+            child: const Text("SET PAID", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -100,38 +71,50 @@ class _PayslipManagementPageState extends State<PayslipManagementPage> {
           const Text("Welcome back, Admin", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
           const SizedBox(height: 24),
 
-          // Search Bar
-          _buildSearchInput("Search by name or employee ID"),
+          _buildSearchInput(),
           const SizedBox(height: 24),
 
-          // Header
           _buildTableHeader(["Employee", "Department", "Month", "Basic", "Net", "Status", "Action"]),
 
-          // Table Body
           Expanded(
-            child: _filteredData.isNotEmpty
-                ? ListView.builder(
-                    itemCount: _filteredData.length,
-                    itemBuilder: (context, index) => _buildPayrollRow(_filteredData[index]),
-                  )
-                : const Center(child: Text("No results found")),
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance.collection('payroll').snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) return const Center(child: Text("Error loading data"));
+                if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+
+                // Filter logic on the client side for search
+                final docs = snapshot.data!.docs.where((doc) {
+                  final name = doc['name'].toString().toLowerCase();
+                  final id = doc['employeeId'].toString().toLowerCase();
+                  return name.contains(_searchQuery) || id.contains(_searchQuery);
+                }).toList();
+
+                if (docs.isEmpty) return const Center(child: Text("No payroll records found"));
+
+                return ListView.builder(
+                  itemCount: docs.length,
+                  itemBuilder: (context, index) => _buildPayrollRow(docs[index]),
+                );
+              },
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSearchInput(String hint) {
+  Widget _buildSearchInput() {
     return Container(
       decoration: BoxDecoration(color: const Color(0xFFE8EAF6), borderRadius: BorderRadius.circular(4)),
       child: TextField(
         controller: _searchController,
-        onChanged: _runFilter,
-        decoration: InputDecoration(
-          hintText: hint,
-          prefixIcon: const Icon(Icons.search),
+        onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
+        decoration: const InputDecoration(
+          hintText: "Search by name or employee ID",
+          prefixIcon: Icon(Icons.search),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 15),
+          contentPadding: EdgeInsets.symmetric(vertical: 15),
         ),
       ),
     );
@@ -147,8 +130,9 @@ class _PayslipManagementPageState extends State<PayslipManagementPage> {
     );
   }
 
-  Widget _buildPayrollRow(Map<String, String> item) {
-    bool isPaid = item["status"] == "PAID";
+  Widget _buildPayrollRow(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    bool isPaid = data["status"] == "PAID";
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
@@ -159,25 +143,25 @@ class _PayslipManagementPageState extends State<PayslipManagementPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(item["name"]!, style: const TextStyle(fontWeight: FontWeight.bold)),
-                Text(item["id"]!, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                Text(data["name"] ?? "", style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text(data["employeeId"] ?? "", style: const TextStyle(fontSize: 11, color: Colors.grey)),
               ],
             ),
           ),
-          Expanded(child: Text(item["dept"]!)),
-          Expanded(child: Text(item["month"]!)),
-          Expanded(child: Text(item["basic"]!)),
-          Expanded(child: Text(item["net"]!)),
+          Expanded(child: Text(data["dept"] ?? "")),
+          Expanded(child: Text(data["month"] ?? "")),
+          Expanded(child: Text("RM ${data["basic"]}")),
+          Expanded(child: Text("RM ${data["net"]}")),
           Expanded(
             child: Text(
-              item["status"]!,
+              data["status"] ?? "",
               style: TextStyle(color: isPaid ? Colors.green : Colors.orange, fontWeight: FontWeight.bold),
             ),
           ),
           Expanded(
             child: IconButton(
               icon: const Icon(Icons.edit_note, color: Colors.blue),
-              onPressed: () => _showEditAction(item), // Functionality starts here
+              onPressed: () => _showEditAction(doc.id, data["name"], data["month"]),
             ),
           ),
         ],

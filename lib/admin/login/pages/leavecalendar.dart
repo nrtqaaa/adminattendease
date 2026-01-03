@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // 1. Import Firestore
 
 class LeaveCalendarPage extends StatefulWidget {
   const LeaveCalendarPage({super.key});
@@ -8,13 +9,8 @@ class LeaveCalendarPage extends StatefulWidget {
 }
 
 class _LeaveCalendarPageState extends State<LeaveCalendarPage> {
-  DateTime _currentDate = DateTime(2025, 12, 1);
-
-  final List<Map<String, dynamic>> _leaveRequests = [
-    {"name": "Husna Aqilah", "start": DateTime(2025, 12, 10), "end": DateTime(2025, 12, 10)},
-    {"name": "Alice Wong", "start": DateTime(2025, 12, 15), "end": DateTime(2025, 12, 17)},
-    {"name": "Amir Hazim", "start": DateTime(2025, 12, 20), "end": DateTime(2025, 12, 21)},
-  ];
+  // Set default view to current month/year
+  DateTime _currentDate = DateTime(DateTime.now().year, DateTime.now().month, 1);
 
   void _changeMonth(int increment) {
     setState(() {
@@ -31,31 +27,8 @@ class _LeaveCalendarPageState extends State<LeaveCalendarPage> {
       backgroundColor: const Color(0xFFF0F4F7),
       body: Column(
         children: [
-          // HEADER SECTION
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-            decoration: const BoxDecoration(
-              color: Color(0xFFE0E0E0),
-              border: Border(bottom: BorderSide(color: Colors.blue, width: 3)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text("Leave Calendar View", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    Text("Welcome back, Admin", style: TextStyle(color: Colors.grey[700], fontStyle: FontStyle.italic)),
-                  ],
-                ),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close),
-                )
-              ],
-            ),
-          ),
+          // HEADER SECTION (Same as your design)
+          _buildHeader(context),
 
           // CALENDAR SECTION
           Expanded(
@@ -69,36 +42,37 @@ class _LeaveCalendarPageState extends State<LeaveCalendarPage> {
                 ),
                 child: Column(
                   children: [
-                    // NAVIGATOR
-                    Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Row(
-                        children: [
-                          IconButton(icon: const Icon(Icons.chevron_left, size: 28), onPressed: () => _changeMonth(-1)),
-                          const SizedBox(width: 10),
-                          Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF0B1D4D))),
-                          const SizedBox(width: 10),
-                          IconButton(icon: const Icon(Icons.chevron_right, size: 28), onPressed: () => _changeMonth(1)),
-                        ],
-                      ),
-                    ),
+                    _buildNavigator(title),
+                    const Divider(height: 1),
+                    _buildDaysHeader(),
                     const Divider(height: 1),
 
-                    // DAYS HEADER (Fixed at top)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                      child: Row(
-                        children: const [
-                          _Header("SUN"), _Header("MON"), _Header("TUE"), _Header("WED"),
-                          _Header("THU"), _Header("FRI"), _Header("SAT"),
-                        ],
-                      ),
-                    ),
-                    const Divider(height: 1),
-
-                    // SCROLLABLE GRID
+                    // LIVE DATABASE GRID
                     Expanded(
-                      child: _buildDynamicGrid(),
+                      child: StreamBuilder<QuerySnapshot>(
+                        // 2. Querying approved leaves for the current month
+                        stream: FirebaseFirestore.instance
+                            .collection('leaveRequests')
+                            .where('status', isEqualTo: 'Approved')
+                            .snapshots(),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
+                            return const Center(child: CircularProgressIndicator());
+                          }
+                          
+                          // Process Firestore data into a list the calendar understands
+                          final List<Map<String, dynamic>> leaves = snapshot.data!.docs.map((doc) {
+                            var data = doc.data() as Map<String, dynamic>;
+                            return {
+                              "name": data['employeeName'] ?? "Unknown",
+                              "start": (data['startDate'] as Timestamp).toDate(),
+                              "end": (data['endDate'] as Timestamp).toDate(),
+                            };
+                          }).toList();
+
+                          return _buildDynamicGrid(leaves);
+                        },
+                      ),
                     ),
                   ],
                 ),
@@ -110,7 +84,60 @@ class _LeaveCalendarPageState extends State<LeaveCalendarPage> {
     );
   }
 
-  Widget _buildDynamicGrid() {
+  // --- UI COMPONENTS ---
+
+  Widget _buildHeader(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+      decoration: const BoxDecoration(
+        color: Color(0xFFE0E0E0),
+        border: Border(bottom: BorderSide(color: Colors.blue, width: 3)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("Leave Calendar View", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              Text("Welcome back, Admin", style: TextStyle(color: Colors.grey[700], fontStyle: FontStyle.italic)),
+            ],
+          ),
+          IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNavigator(String title) {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Row(
+        children: [
+          IconButton(icon: const Icon(Icons.chevron_left, size: 28), onPressed: () => _changeMonth(-1)),
+          const SizedBox(width: 10),
+          Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF0B1D4D))),
+          const SizedBox(width: 10),
+          IconButton(icon: const Icon(Icons.chevron_right, size: 28), onPressed: () => _changeMonth(1)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDaysHeader() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 15),
+      child: Row(
+        children: const [
+          _Header("SUN"), _Header("MON"), _Header("TUE"), _Header("WED"),
+          _Header("THU"), _Header("FRI"), _Header("SAT"),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDynamicGrid(List<Map<String, dynamic>> leaveRequests) {
     final int year = _currentDate.year;
     final int month = _currentDate.month;
     final int daysInMonth = DateTime(year, month + 1, 0).day;
@@ -119,20 +146,16 @@ class _LeaveCalendarPageState extends State<LeaveCalendarPage> {
     final int totalCells = (offset + daysInMonth > 35) ? 42 : 35;
 
     return GridView.builder(
-      // FIXED: Enabled scrolling here
-      physics: const BouncingScrollPhysics(), 
-      padding: EdgeInsets.zero,
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+      physics: const BouncingScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 7,
-        // Increased ratio to prevent cells from being too tall/squashed
-        childAspectRatio: 1.2, 
+        childAspectRatio: 1.2,
       ),
       itemCount: totalCells,
       itemBuilder: (context, index) {
         final int dayNum = index - offset + 1;
-
         if (dayNum < 1 || dayNum > daysInMonth) {
-          return Container(decoration: BoxDecoration(border: Border.all(color: Colors.black.withValues(alpha: 0.05))));
+          return Container(decoration: BoxDecoration(border: Border.all(color: Colors.black12.withOpacity(0.05))));
         }
 
         final DateTime cellDate = DateTime(year, month, dayNum);
@@ -140,7 +163,7 @@ class _LeaveCalendarPageState extends State<LeaveCalendarPage> {
         bool isStart = false;
         bool isEnd = false;
 
-        for (var leave in _leaveRequests) {
+        for (var leave in leaveRequests) {
           DateTime start = DateTime(leave['start'].year, leave['start'].month, leave['start'].day);
           DateTime end = DateTime(leave['end'].year, leave['end'].month, leave['end'].day);
 
@@ -154,18 +177,12 @@ class _LeaveCalendarPageState extends State<LeaveCalendarPage> {
         }
 
         return Container(
-          decoration: BoxDecoration(border: Border.all(color: Colors.black.withValues(alpha: 0.05))),
+          decoration: BoxDecoration(border: Border.all(color: Colors.black12.withOpacity(0.05))),
           child: Stack(
             children: [
-              Positioned(
-                top: 8, left: 8,
-                child: Text("$dayNum", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              ),
+              Positioned(top: 8, left: 8, child: Text("$dayNum", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
               if (leaveName != null)
-                Positioned(
-                  bottom: 8, left: 0, right: 0,
-                  child: _buildLeaveLabel(leaveName, isStart, isEnd, index),
-                ),
+                Positioned(bottom: 8, left: 0, right: 0, child: _buildLeaveLabel(leaveName, isStart, isEnd, index)),
             ],
           ),
         );
