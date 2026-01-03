@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class LeaveBalancePage extends StatefulWidget {
   const LeaveBalancePage({super.key});
@@ -8,58 +9,32 @@ class LeaveBalancePage extends StatefulWidget {
 }
 
 class _LeaveBalancePageState extends State<LeaveBalancePage> {
-  // 1. DATA: Master list of employees
-  final List<Map<String, dynamic>> _allEmployees = [
-    {"name": "Hani Syakirah", "id": "EMP001", "dept": "IT", "alBal": 14, "alTotal": 22, "slBal": 11, "slTotal": 14, "elBal": 4, "elTotal": 5},
-    {"name": "Alice Wong", "id": "EMP002", "dept": "IT", "alBal": 14, "alTotal": 22, "slBal": 11, "slTotal": 14, "elBal": 4, "elTotal": 5},
-    {"name": "Husna Aqilah", "id": "EMP003", "dept": "Marketing", "alBal": 14, "alTotal": 22, "slBal": 11, "slTotal": 14, "elBal": 4, "elTotal": 5},
-    {"name": "Amir Amzah", "id": "EMP004", "dept": "Marketing", "alBal": 14, "alTotal": 22, "slBal": 11, "slTotal": 14, "elBal": 4, "elTotal": 5},
-    {"name": "Alam Ikmal", "id": "EMP005", "dept": "HR", "alBal": 14, "alTotal": 22, "slBal": 11, "slTotal": 14, "elBal": 4, "elTotal": 5},
-    {"name": "Amir Amzah", "id": "EMP006", "dept": "Sales", "alBal": 14, "alTotal": 22, "slBal": 11, "slTotal": 14, "elBal": 4, "elTotal": 5},
-    {"name": "Alam Ikmal", "id": "EMP007", "dept": "Sales", "alBal": 14, "alTotal": 22, "slBal": 11, "slTotal": 14, "elBal": 4, "elTotal": 5},
-  ];
-
-  List<Map<String, dynamic>> _filteredEmployees = [];
+  String _searchQuery = "";
   final TextEditingController _searchController = TextEditingController();
 
-  @override
-  void initState() {
-    super.initState();
-    _filteredEmployees = _allEmployees;
-  }
-
-  // 2. LOGIC: Filter
-  void _runFilter(String enteredKeyword) {
-    setState(() {
-      if (enteredKeyword.isEmpty) {
-        _filteredEmployees = _allEmployees;
-      } else {
-        _filteredEmployees = _allEmployees
-            .where((user) =>
-                user["name"].toLowerCase().contains(enteredKeyword.toLowerCase()) ||
-                user["id"].toLowerCase().contains(enteredKeyword.toLowerCase()))
-            .toList();
+  // 1. DATABASE LOGIC: Update Firestore
+  Future<void> _updateFirebaseBalance(String docId, int al, int sl, int el) async {
+    try {
+      await FirebaseFirestore.instance.collection('employees').doc(docId).update({
+        'alBal': al,
+        'slBal': sl,
+        'elBal': el,
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Balance updated successfully")),
+        );
       }
-    });
+    } catch (e) {
+      debugPrint("Update failed: $e");
+    }
   }
 
-  // 3. LOGIC: Update Data
-  void _updateLeaveData(String id, int al, int sl, int el) {
-    setState(() {
-      final index = _allEmployees.indexWhere((emp) => emp["id"] == id);
-      if (index != -1) {
-        _allEmployees[index]["alBal"] = al;
-        _allEmployees[index]["slBal"] = sl;
-        _allEmployees[index]["elBal"] = el;
-      }
-    });
-  }
-
-  // 4. UI: Edit Dialog
-  void _showEditDialog(Map<String, dynamic> emp) {
-    final alCtrl = TextEditingController(text: emp["alBal"].toString());
-    final slCtrl = TextEditingController(text: emp["slBal"].toString());
-    final elCtrl = TextEditingController(text: emp["elBal"].toString());
+  // 2. UI: Edit Dialog
+  void _showEditDialog(String docId, Map<String, dynamic> emp) {
+    final alCtrl = TextEditingController(text: (emp["alBal"] ?? 0).toString());
+    final slCtrl = TextEditingController(text: (emp["slBal"] ?? 0).toString());
+    final elCtrl = TextEditingController(text: (emp["elBal"] ?? 0).toString());
 
     showDialog(
       context: context,
@@ -68,9 +43,9 @@ class _LeaveBalancePageState extends State<LeaveBalancePage> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildDialogTextField("Annual Leave", alCtrl),
-            _buildDialogTextField("Sick Leave", slCtrl),
-            _buildDialogTextField("Emergency Leave", elCtrl),
+            _buildDialogTextField("Annual Leave Balance", alCtrl),
+            _buildDialogTextField("Sick Leave Balance", slCtrl),
+            _buildDialogTextField("Emergency Leave Balance", elCtrl),
           ],
         ),
         actions: [
@@ -78,11 +53,11 @@ class _LeaveBalancePageState extends State<LeaveBalancePage> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0B1D4D)),
             onPressed: () {
-              _updateLeaveData(
-                emp["id"],
-                int.tryParse(alCtrl.text) ?? emp["alBal"],
-                int.tryParse(slCtrl.text) ?? emp["slBal"],
-                int.tryParse(elCtrl.text) ?? emp["elBal"],
+              _updateFirebaseBalance(
+                docId,
+                int.tryParse(alCtrl.text) ?? 0,
+                int.tryParse(slCtrl.text) ?? 0,
+                int.tryParse(elCtrl.text) ?? 0,
               );
               Navigator.pop(context);
             },
@@ -93,26 +68,12 @@ class _LeaveBalancePageState extends State<LeaveBalancePage> {
     );
   }
 
-  Widget _buildDialogTextField(String label, TextEditingController controller) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: TextField(
-        controller: controller,
-        keyboardType: TextInputType.number,
-        decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Column(
         children: [
-          // Header & Search Section
           _buildHeaderSection(),
-          
-          // Table Section
           Expanded(
             child: Padding(
               padding: const EdgeInsets.all(32),
@@ -121,12 +82,31 @@ class _LeaveBalancePageState extends State<LeaveBalancePage> {
                   _buildTableHeader(),
                   const SizedBox(height: 10),
                   Expanded(
-                    child: _filteredEmployees.isNotEmpty
-                        ? ListView.builder(
-                            itemCount: _filteredEmployees.length,
-                            itemBuilder: (context, index) => _buildBalanceRow(_filteredEmployees[index]),
-                          )
-                        : const Center(child: Text("No employees found")),
+                    // 3. LIVE STREAM: Fetching from Firestore
+                    child: StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance.collection('employees').snapshots(),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+
+                        // Filter logic for search
+                        var docs = snapshot.data!.docs.where((doc) {
+                          var data = doc.data() as Map<String, dynamic>;
+                          String name = data['name']?.toLowerCase() ?? "";
+                          String id = doc.id.toLowerCase();
+                          return name.contains(_searchQuery.toLowerCase()) || id.contains(_searchQuery.toLowerCase());
+                        }).toList();
+
+                        if (docs.isEmpty) return const Center(child: Text("No employees found"));
+
+                        return ListView.builder(
+                          itemCount: docs.length,
+                          itemBuilder: (context, index) {
+                            var empData = docs[index].data() as Map<String, dynamic>;
+                            return _buildBalanceRow(docs[index].id, empData);
+                          },
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),
@@ -136,6 +116,8 @@ class _LeaveBalancePageState extends State<LeaveBalancePage> {
       ),
     );
   }
+
+  // --- UI COMPONENTS (SAME AS YOURS WITH MINOR TWEAKS) ---
 
   Widget _buildHeaderSection() {
     return Container(
@@ -149,14 +131,14 @@ class _LeaveBalancePageState extends State<LeaveBalancePage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text("Leave Balance Management", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-          const Text("Welcome back, Admin", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
+          const Text("Live Employee Quota Tracking", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
           const SizedBox(height: 20),
           Container(
             height: 40,
             decoration: BoxDecoration(color: const Color(0xFFE8EAF6), borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.black12)),
             child: TextField(
               controller: _searchController,
-              onChanged: _runFilter,
+              onChanged: (val) => setState(() => _searchQuery = val),
               decoration: const InputDecoration(
                 hintText: "Search by name or employee ID",
                 prefixIcon: Icon(Icons.search, size: 20),
@@ -174,8 +156,8 @@ class _LeaveBalancePageState extends State<LeaveBalancePage> {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
       decoration: BoxDecoration(color: const Color(0xFFA6BDCC), borderRadius: BorderRadius.circular(8)),
-      child: Row(
-        children: const [
+      child: const Row(
+        children: [
           Expanded(flex: 2, child: Text("Employee", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
           Expanded(flex: 1, child: Text("Dept", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
           Expanded(flex: 1, child: Text("Annual", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
@@ -187,21 +169,21 @@ class _LeaveBalancePageState extends State<LeaveBalancePage> {
     );
   }
 
-  Widget _buildBalanceRow(Map<String, dynamic> emp) {
+  Widget _buildBalanceRow(String docId, Map<String, dynamic> emp) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
       decoration: BoxDecoration(color: const Color(0xFFF0F4F7), borderRadius: BorderRadius.circular(8)),
       child: Row(
         children: [
-          Expanded(flex: 2, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(emp["name"], style: const TextStyle(fontWeight: FontWeight.bold)), Text(emp["id"], style: const TextStyle(color: Colors.grey, fontSize: 12))])),
-          Expanded(flex: 1, child: Text(emp["dept"], style: const TextStyle(fontWeight: FontWeight.bold))),
-          Expanded(flex: 1, child: _buildLeaveCell(emp["alBal"], emp["alTotal"])),
-          Expanded(flex: 1, child: _buildLeaveCell(emp["slBal"], emp["slTotal"])),
-          Expanded(flex: 1, child: _buildLeaveCell(emp["elBal"], emp["elTotal"])),
+          Expanded(flex: 2, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(emp["name"] ?? "Unknown", style: const TextStyle(fontWeight: FontWeight.bold)), Text(docId, style: const TextStyle(color: Colors.grey, fontSize: 12))])),
+          Expanded(flex: 1, child: Text(emp["department"] ?? "N/A", style: const TextStyle(fontWeight: FontWeight.bold))),
+          Expanded(flex: 1, child: _buildLeaveCell(emp["alBal"] ?? 0, emp["alTotal"] ?? 22)),
+          Expanded(flex: 1, child: _buildLeaveCell(emp["slBal"] ?? 0, emp["slTotal"] ?? 14)),
+          Expanded(flex: 1, child: _buildLeaveCell(emp["elBal"] ?? 0, emp["elTotal"] ?? 5)),
           IconButton(
             icon: const Icon(Icons.edit_note, color: Colors.blue, size: 28),
-            onPressed: () => _showEditDialog(emp),
+            onPressed: () => _showEditDialog(docId, emp),
           ),
         ],
       ),
@@ -216,6 +198,17 @@ class _LeaveBalancePageState extends State<LeaveBalancePage> {
         Text("OF $total", style: const TextStyle(fontSize: 8, color: Colors.grey)),
         Text("${total - balance} used", style: const TextStyle(fontSize: 8, color: Colors.redAccent)),
       ],
+    );
+  }
+
+  Widget _buildDialogTextField(String label, TextEditingController controller) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: TextField(
+        controller: controller,
+        keyboardType: TextInputType.number,
+        decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+      ),
     );
   }
 }

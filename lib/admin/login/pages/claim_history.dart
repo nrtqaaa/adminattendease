@@ -1,7 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Import Firebase
 
-class ClaimHistoryPage extends StatelessWidget {
+class ClaimHistoryPage extends StatefulWidget {
   const ClaimHistoryPage({super.key});
+
+  @override
+  State<ClaimHistoryPage> createState() => _ClaimHistoryPageState();
+}
+
+class _ClaimHistoryPageState extends State<ClaimHistoryPage> {
+  // Logic for filtering
+  String _searchQuery = "";
+  final TextEditingController _claimTypeController = TextEditingController();
+
+  // Stream to listen to the 'claims' collection in Firestore
+  Stream<QuerySnapshot> _getClaimsStream() {
+    return FirebaseFirestore.instance
+        .collection('claims')
+        .orderBy('submittedAt', descending: true) // Newest claims first
+        .snapshots();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -13,9 +31,16 @@ class ClaimHistoryPage extends StatelessWidget {
           padding: const EdgeInsets.all(32.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
-              Text("Claim History", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-              Text("55 Total Claims", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
+            children: [
+              const Text("Claim History", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+              // Dynamic counter using a StreamBuilder
+              StreamBuilder<QuerySnapshot>(
+                stream: _getClaimsStream(),
+                builder: (context, snapshot) {
+                  int count = snapshot.hasData ? snapshot.data!.docs.length : 0;
+                  return Text("$count Total Claims", style: const TextStyle(color: Colors.grey, fontStyle: FontStyle.italic));
+                }
+              ),
             ],
           ),
         ),
@@ -24,11 +49,7 @@ class ClaimHistoryPage extends StatelessWidget {
         Container(
           margin: const EdgeInsets.symmetric(horizontal: 32),
           padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
-          ),
+          decoration: _cardDecoration(),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -36,12 +57,15 @@ class ClaimHistoryPage extends StatelessWidget {
               const Divider(height: 32),
               Row(
                 children: [
-                  _buildSearchInput("Claims Type", 300),
+                  _buildSearchInput("Claims Type", 300, _claimTypeController),
                   const SizedBox(width: 32),
-                  _buildSearchInput("Date", 200),
                   const Spacer(),
                   ElevatedButton(
-                    onPressed: () {},
+                    onPressed: () {
+                      setState(() {
+                        _searchQuery = _claimTypeController.text.trim();
+                      });
+                    },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF0B1D4D),
                       padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
@@ -54,16 +78,12 @@ class ClaimHistoryPage extends StatelessWidget {
           ),
         ),
 
-        // HISTORY TABLE
+        // HISTORY TABLE (DYNAMIC)
         Expanded(
           child: Container(
             margin: const EdgeInsets.all(32),
             padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
-            ),
+            decoration: _cardDecoration(),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -71,13 +91,35 @@ class ClaimHistoryPage extends StatelessWidget {
                 const SizedBox(height: 20),
                 _buildTableHeader(["Claim ID", "Name", "Email", "Claim Type", "Action"]),
                 Expanded(
-                  child: ListView(
-                    children: [
-                      _buildHistoryRow("CLM001", "Anastasia Kim", "kistasia@ds.com", "Insurance"),
-                      _buildHistoryRow("CLM002", "Ruqaiyah", "meliyah@ds.com", "Car Insurance"),
-                      _buildHistoryRow("CLM003", "Dina Adreana", "adreadian@ds.com", "Health Insurance"),
-                      _buildHistoryRow("CLM004", "Nuha Marsya", "mnuhas@ds.com", "Health Insurance"),
-                    ],
+                  child: StreamBuilder<QuerySnapshot>(
+                    stream: _getClaimsStream(),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasError) return const Center(child: Text("Error loading claims"));
+                      if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+
+                      // Filter logic for the list
+                      var docs = snapshot.data!.docs;
+                      if (_searchQuery.isNotEmpty) {
+                        docs = docs.where((doc) => 
+                          doc['type'].toString().toLowerCase().contains(_searchQuery.toLowerCase())
+                        ).toList();
+                      }
+
+                      if (docs.isEmpty) return const Center(child: Text("No claims found."));
+
+                      return ListView.builder(
+                        itemCount: docs.length,
+                        itemBuilder: (context, index) {
+                          var data = docs[index].data() as Map<String, dynamic>;
+                          return _buildHistoryRow(
+                            data['claimId'] ?? 'N/A',
+                            data['name'] ?? 'Unknown',
+                            data['email'] ?? 'N/A',
+                            data['type'] ?? 'General',
+                          );
+                        },
+                      );
+                    },
                   ),
                 ),
               ],
@@ -88,7 +130,15 @@ class ClaimHistoryPage extends StatelessWidget {
     );
   }
 
-  Widget _buildSearchInput(String label, double width) {
+  // --- UI HELPERS ---
+
+  BoxDecoration _cardDecoration() => BoxDecoration(
+    color: Colors.white,
+    borderRadius: BorderRadius.circular(12),
+    boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
+  );
+
+  Widget _buildSearchInput(String label, double width, TextEditingController controller) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -101,6 +151,13 @@ class ClaimHistoryPage extends StatelessWidget {
             color: const Color(0xFFE8EAF6),
             border: Border.all(color: Colors.black12),
             borderRadius: BorderRadius.circular(4),
+          ),
+          child: TextField(
+            controller: controller,
+            decoration: const InputDecoration(
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            ),
           ),
         ),
       ],
@@ -127,7 +184,14 @@ class ClaimHistoryPage extends StatelessWidget {
           Expanded(child: Text(name, style: const TextStyle(fontWeight: FontWeight.bold))),
           Expanded(child: Text(email)),
           Expanded(child: Text(type, style: const TextStyle(fontWeight: FontWeight.bold))),
-          const Expanded(child: Icon(Icons.edit_note, size: 28)),
+          Expanded(
+            child: IconButton(
+              icon: const Icon(Icons.visibility, color: Colors.blueGrey),
+              onPressed: () {
+                // Future: Show claim details/attachments
+              },
+            ),
+          ),
         ],
       ),
     );

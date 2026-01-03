@@ -1,7 +1,34 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-class ClaimManagementPage extends StatelessWidget {
+class ClaimManagementPage extends StatefulWidget {
   const ClaimManagementPage({super.key});
+
+  @override
+  State<ClaimManagementPage> createState() => _ClaimManagementPageState();
+}
+
+class _ClaimManagementPageState extends State<ClaimManagementPage> {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  String _searchQuery = "";
+
+  // --- DATABASE LOGIC: Update Claim Status ---
+  Future<void> _updateClaimStatus(String docId, String newStatus) async {
+    try {
+      await _firestore.collection('claims').doc(docId).update({
+        'status': newStatus,
+        'reviewedAt': FieldValue.serverTimestamp(),
+      });
+      
+      if (!mounted) return; // Fix for use_build_context_synchronously
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Claim marked as $newStatus")),
+      );
+    } catch (e) {
+      debugPrint("Error updating claim: $e");
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -14,21 +41,51 @@ class ClaimManagementPage extends StatelessWidget {
           const Text("Welcome back, Admin", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
           const SizedBox(height: 24),
 
-          // FILTERS
-          _buildLongSearchInput("Search by name or employee ID"),
-          const SizedBox(height: 10),
-          _buildLongSearchInput(""),
+          // SEARCH FILTER
+          _buildSearchField(),
           const SizedBox(height: 24),
 
           // MANAGEMENT TABLE
-          _buildManagementHeader(["Employeee", "Type", "Description", "Amount", "Date", "Status", "Action"]),
+          _buildManagementHeader(["Employee", "Type", "Description", "Amount", "Date", "Status", "Action"]),
+          
           Expanded(
-            child: ListView(
-              children: [
-                _buildManagementRow("Hani Syakirah", "EMP001", "Travel", "Client Meeting", "RM 450", "1/11/2025", "Pending", isPending: true),
-                _buildManagementRow("Hani Syakirah", "EMP001", "Medical", "Medical Checkup", "RM 500", "14/11/2025", "Approved"),
-                _buildManagementRow("Hani Syakirah", "EMP001", "Office supplies", "Ergonomic Keyboard", "RM 100", "23/11/2025", "Rejected"),
-              ],
+            child: StreamBuilder<QuerySnapshot>(
+              stream: _firestore.collection('claims').snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) return const Center(child: Text("Error fetching data"));
+                if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+
+                var docs = snapshot.data!.docs;
+
+                // Simple Search Filtering
+                if (_searchQuery.isNotEmpty) {
+                  docs = docs.where((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    String name = (data['name'] ?? '').toString().toLowerCase();
+                    String id = (data['employeeId'] ?? '').toString().toLowerCase();
+                    return name.contains(_searchQuery.toLowerCase()) || id.contains(_searchQuery.toLowerCase());
+                  }).toList();
+                }
+
+                return ListView.builder(
+                  itemCount: docs.length,
+                  itemBuilder: (context, index) {
+                    var data = docs[index].data() as Map<String, dynamic>;
+                    String docId = docs[index].id;
+
+                    return _buildManagementRow(
+                      docId,
+                      data['name'] ?? 'Unknown',
+                      data['employeeId'] ?? '-',
+                      data['type'] ?? '-',
+                      data['description'] ?? '-',
+                      data['amount'] ?? '0',
+                      data['date'] ?? '-',
+                      data['status'] ?? 'Pending',
+                    );
+                  },
+                );
+              },
             ),
           ),
         ],
@@ -36,18 +93,24 @@ class ClaimManagementPage extends StatelessWidget {
     );
   }
 
-  Widget _buildLongSearchInput(String hint) {
+  // --- UI COMPONENTS ---
+
+  Widget _buildSearchField() {
     return Container(
-      width: double.infinity,
-      height: 35,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      height: 45,
       decoration: BoxDecoration(
         color: const Color(0xFFE8EAF6),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.black26),
       ),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Text(hint, style: const TextStyle(color: Colors.grey, fontStyle: FontStyle.italic, fontSize: 13)),
+      child: TextField(
+        onChanged: (val) => setState(() => _searchQuery = val),
+        decoration: const InputDecoration(
+          hintText: "Search by name or employee ID",
+          prefixIcon: Icon(Icons.search),
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.symmetric(vertical: 10),
+        ),
       ),
     );
   }
@@ -62,7 +125,9 @@ class ClaimManagementPage extends StatelessWidget {
     );
   }
 
-  Widget _buildManagementRow(String name, String id, String type, String desc, String amount, String date, String status, {bool isPending = false}) {
+  Widget _buildManagementRow(String docId, String name, String id, String type, String desc, String amount, String date, String status) {
+    bool isPending = status.toLowerCase() == "pending";
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
       decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Colors.black12))),
@@ -75,32 +140,64 @@ class ClaimManagementPage extends StatelessWidget {
               Text(id, style: const TextStyle(fontSize: 12)),
             ],
           )),
-          Expanded(child: Text(type, style: const TextStyle(fontWeight: FontWeight.bold))),
-          Expanded(child: Text(desc, style: const TextStyle(fontWeight: FontWeight.bold))),
-          Expanded(child: Text(amount, style: const TextStyle(fontWeight: FontWeight.bold))),
-          Expanded(child: Text(date, style: const TextStyle(fontWeight: FontWeight.bold))),
-          Expanded(child: Text(status, style: const TextStyle(fontWeight: FontWeight.bold))),
+          Expanded(child: Text(type)),
+          Expanded(child: Text(desc)),
+          Expanded(child: Text("RM $amount", style: const TextStyle(fontWeight: FontWeight.bold))),
+          Expanded(child: Text(date)),
+          Expanded(child: _buildStatusBadge(status)),
           Expanded(
             child: isPending 
               ? Row(
                   children: [
-                    _buildStatusIcon(Icons.check, Colors.green, const Color(0xFFA5D6A7)),
+                    InkWell(
+                      onTap: () => _updateClaimStatus(docId, "Approved"),
+                      child: _buildStatusIcon(Icons.check, Colors.green, Colors.green.withValues(alpha: 0.2)),
+                    ),
                     const SizedBox(width: 8),
-                    _buildStatusIcon(Icons.close, Colors.red, const Color(0xFFEF9A9A)),
+                    InkWell(
+                      onTap: () => _updateClaimStatus(docId, "Rejected"),
+                      child: _buildStatusIcon(Icons.close, Colors.red, Colors.red.withValues(alpha: 0.2)),
+                    ),
                   ],
                 )
-              : const SizedBox(),
+              : const Text("Processed", style: TextStyle(color: Colors.grey, fontSize: 12)),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildStatusIcon(IconData icon, Color color, Color bg) {
+  // FIXED: Added missing _buildStatusBadge method
+  Widget _buildStatusBadge(String status) {
+    Color color;
+    switch (status.toLowerCase()) {
+      case 'approved': color = Colors.green; break;
+      case 'rejected': color = Colors.red; break;
+      default: color = Colors.orange; // Pending
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        status,
+        style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12),
+      ),
+    );
+  }
+
+  // FIXED: Added missing _buildStatusIcon method
+  Widget _buildStatusIcon(IconData icon, Color color, Color bgColor) {
     return Container(
       padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(4), border: Border.all(color: color)),
-      child: Icon(icon, color: color, size: 16),
+      decoration: BoxDecoration(
+        color: bgColor,
+        shape: BoxShape.circle,
+      ),
+      child: Icon(icon, color: color, size: 20),
     );
   }
 }

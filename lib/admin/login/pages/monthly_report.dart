@@ -1,9 +1,91 @@
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart'; // Ensure fl_chart is in pubspec.yaml
-import 'reportsearch.dart'; // IMPORT THE NEW PAGE HERE
+import 'package:fl_chart/fl_chart.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
+import 'reportsearch.dart';
 
-class MonthlyReportPage extends StatelessWidget {
+class MonthlyReportPage extends StatefulWidget {
   const MonthlyReportPage({super.key});
+
+  @override
+  State<MonthlyReportPage> createState() => _MonthlyReportPageState();
+}
+
+class _MonthlyReportPageState extends State<MonthlyReportPage> {
+  // Filters
+  String selectedDepartment = "All";
+  DateTime selectedMonth = DateTime.now();
+
+  // Stats Counters
+  int totalPresents = 0;
+  int totalAbsents = 0;
+  int totalLate = 0;
+  int totalLeave = 0;
+  int missedCheckIns = 0;
+  int totalClaims = 0;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchMonthlyData();
+  }
+
+  /// Logic: Query Firestore and Aggregate Totals
+  Future<void> _fetchMonthlyData() async {
+    setState(() => _isLoading = true);
+
+    // 1. Define Date Range (Start and End of selected month)
+    DateTime firstDay = DateTime(selectedMonth.year, selectedMonth.month, 1);
+    DateTime lastDay = DateTime(selectedMonth.year, selectedMonth.month + 1, 0);
+    
+    String startStr = DateFormat('yyyy-MM-dd').format(firstDay);
+    String endStr = DateFormat('yyyy-MM-dd').format(lastDay);
+
+    try {
+      // 2. Query Attendance Collection
+      Query attendanceQuery = FirebaseFirestore.instance.collection('attendance')
+          .where('date', isGreaterThanOrEqualTo: startStr)
+          .where('date', isLessThanOrEqualTo: endStr);
+
+      if (selectedDepartment != "All") {
+        attendanceQuery = attendanceQuery.where('department', isEqualTo: selectedDepartment);
+      }
+
+      final attendanceSnap = await attendanceQuery.get();
+
+      // Reset counters
+      int p = 0, a = 0, l = 0, m = 0;
+
+      for (var doc in attendanceSnap.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        String status = data['status'] ?? "";
+        
+        if (status == "Present") p++;
+        if (status == "Absent") a++;
+        if (status == "Late") l++;
+        if (data['clockOut'] == null || data['clockOut'] == "--:--") m++;
+      }
+
+      // 3. Query Leave Requests (Approved only for this month)
+      final leaveSnap = await FirebaseFirestore.instance.collection('leaveRequests')
+          .where('status', isEqualTo: 'Approved')
+          .where('startDate', isGreaterThanOrEqualTo: startStr)
+          .get();
+
+      setState(() {
+        totalPresents = p;
+        totalAbsents = a;
+        totalLate = l;
+        missedCheckIns = m;
+        totalLeave = leaveSnap.docs.length;
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint("Error fetching report: $e");
+      setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -11,42 +93,35 @@ class MonthlyReportPage extends StatelessWidget {
       backgroundColor: const Color(0xFFE9F0F4),
       body: Column(
         children: [
-          // Header
           _buildHeader(),
-
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Search Section
-                  _buildSearchSection(
-                    context,
-                  ), // Pass context to enable navigation
-                  const SizedBox(height: 30),
-
-                  // Summary Statistics Grid
-                  Wrap(
-                    spacing: 20,
-                    runSpacing: 20,
+            child: _isLoading 
+              ? const Center(child: CircularProgressIndicator()) 
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildStatCard("Total Presents", "76"),
-                      _buildStatCard("Total Absents", "20"),
-                      _buildStatCard("Total Late", "15"),
-                      _buildStatCard("Total Leave", "10"),
-                      _buildStatCard("Missed Check-ins", "5"),
-                      _buildStatCard("Total Claims", "30"),
+                      _buildSearchSection(context),
+                      const SizedBox(height: 30),
+                      
+                      Wrap(
+                        spacing: 20,
+                        runSpacing: 20,
+                        children: [
+                          _buildStatCard("Total Presents", totalPresents.toString()),
+                          _buildStatCard("Total Absents", totalAbsents.toString()),
+                          _buildStatCard("Total Late", totalLate.toString()),
+                          _buildStatCard("Total Leave", totalLeave.toString()),
+                          _buildStatCard("Missed Check-ins", missedCheckIns.toString()),
+                          _buildStatCard("Total Claims", totalClaims.toString()),
+                        ],
+                      ),
+                      const SizedBox(height: 40),
+                      _buildChartSection(),
                     ],
                   ),
-
-                  const SizedBox(height: 40),
-
-                  // Pie Chart Section
-                  _buildChartSection(),
-                ],
-              ),
-            ),
+                ),
           ),
         ],
       ),
@@ -62,18 +137,12 @@ class MonthlyReportPage extends StatelessWidget {
         children: [
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
-              Text(
-                "Report",
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-              ),
-              Text(
-                "Today's overview",
-                style: TextStyle(fontSize: 12, color: Colors.black54),
-              ),
+            children: [
+              const Text("Monthly Report", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              Text(DateFormat('MMMM yyyy').format(selectedMonth), style: const TextStyle(fontSize: 12, color: Colors.black54)),
             ],
           ),
-          const Icon(Icons.logout_rounded),
+          const Icon(Icons.download_rounded), // Changed to download for report context
         ],
       ),
     );
@@ -85,60 +154,82 @@ class MonthlyReportPage extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        // FIXED: Replaced withOpacity with withValues
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          const Text(
-            "Employees Monthly Reports",
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const Divider(),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              _buildDropdown("Departments"),
-              const SizedBox(width: 20),
-              _buildDropdown("Date", isDate: true),
-              const Spacer(),
-
-              // --- SEARCH BUTTON (UPDATED) ---
-              ElevatedButton(
-                onPressed: () {
-                  // Navigate to the Report Search Result Page
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const ReportSearchPage(),
-                    ),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF000080),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 40,
-                    vertical: 18,
-                  ),
-                ),
-                child: const Text(
-                  "SEARCH",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
+          _buildFilterDropdown("Department", ["All", "IT", "HR", "Sales", "Finance"], (val) {
+             setState(() => selectedDepartment = val!);
+          }, selectedDepartment),
+          const SizedBox(width: 20),
+          _buildMonthPicker(),
+          const Spacer(),
+          ElevatedButton(
+            onPressed: _fetchMonthlyData,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF000080),
+              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 18),
+            ),
+            child: const Text("GENERATE", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildFilterDropdown(String label, List<String> options, ValueChanged<String?> onChanged, String currentVal) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 5),
+        Container(
+          width: 200,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(color: const Color(0xFFE3E8FF), border: Border.all(color: Colors.black12)),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: currentVal,
+              items: options.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: onChanged,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMonthPicker() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text("Month", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 5),
+        InkWell(
+          onTap: () async {
+            // Simple Month Picker Logic
+            final DateTime? picked = await showDatePicker(
+              context: context,
+              initialDate: selectedMonth,
+              firstDate: DateTime(2020),
+              lastDate: DateTime.now(),
+            );
+            if (picked != null) setState(() => selectedMonth = picked);
+          },
+          child: Container(
+            width: 200, height: 48,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(color: const Color(0xFFE3E8FF), border: Border.all(color: Colors.black12)),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(DateFormat('MMMM yyyy').format(selectedMonth)),
+                const Icon(Icons.calendar_month, size: 20),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -154,95 +245,54 @@ class MonthlyReportPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: const TextStyle(fontSize: 14, color: Colors.black87),
-          ),
+          Text(label, style: const TextStyle(fontSize: 14, color: Colors.black87)),
           const SizedBox(height: 8),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: Colors.black54,
-            ),
-          ),
+          Text(value, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF000080))),
         ],
       ),
     );
   }
 
   Widget _buildChartSection() {
+    double total = (totalPresents + totalAbsents + totalLate + totalLeave).toDouble();
+    if (total == 0) total = 1; // Prevent division by zero
+
     return Container(
       padding: const EdgeInsets.all(30),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
       child: Row(
         children: [
-          // PIE CHART
           SizedBox(
-            height: 250,
-            width: 250,
+            height: 250, width: 250,
             child: PieChart(
               PieChartData(
+                sectionsSpace: 2,
+                centerSpaceRadius: 40,
                 sections: [
-                  PieChartSectionData(
-                    color: const Color(0xFF000080),
-                    value: 76,
-                    radius: 50,
-                    showTitle: false,
-                  ),
-                  PieChartSectionData(
-                    color: Colors.red,
-                    value: 30,
-                    radius: 50,
-                    showTitle: false,
-                  ),
-                  PieChartSectionData(
-                    color: Colors.yellow[700],
-                    value: 20,
-                    radius: 50,
-                    showTitle: false,
-                  ),
-                  PieChartSectionData(
-                    color: Colors.greenAccent[400],
-                    value: 15,
-                    radius: 50,
-                    showTitle: false,
-                  ),
-                  PieChartSectionData(
-                    color: Colors.purple[300],
-                    value: 10,
-                    radius: 50,
-                    showTitle: false,
-                  ),
-                  PieChartSectionData(
-                    color: Colors.blueAccent,
-                    value: 5,
-                    radius: 50,
-                    showTitle: false,
-                  ),
+                  PieChartSectionData(color: const Color(0xFF000080), value: totalPresents.toDouble(), radius: 50, showTitle: false),
+                  PieChartSectionData(color: Colors.yellow[700], value: totalAbsents.toDouble(), radius: 50, showTitle: false),
+                  PieChartSectionData(color: Colors.greenAccent[400], value: totalLate.toDouble(), radius: 50, showTitle: false),
+                  PieChartSectionData(color: Colors.purple[300], value: totalLeave.toDouble(), radius: 50, showTitle: false),
                 ],
               ),
             ),
           ),
           const SizedBox(width: 60),
-          // LEGEND
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildLegendItem(const Color(0xFF000080), "Total Presents"),
-              _buildLegendItem(Colors.red, "Total Claims"),
-              _buildLegendItem(Colors.yellow[700]!, "Total Absents"),
-              _buildLegendItem(Colors.greenAccent[400]!, "Total Late"),
-              _buildLegendItem(Colors.purple[300]!, "Total Leave"),
-              _buildLegendItem(Colors.blueAccent, "Missed Check-ins"),
-            ],
-          ),
+          _buildLegend(),
         ],
       ),
+    );
+  }
+
+  Widget _buildLegend() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLegendItem(const Color(0xFF000080), "Presents"),
+        _buildLegendItem(Colors.yellow[700]!, "Absents"),
+        _buildLegendItem(Colors.greenAccent[400]!, "Late"),
+        _buildLegendItem(Colors.purple[300]!, "Leaves"),
+      ],
     );
   }
 
@@ -251,42 +301,11 @@ class MonthlyReportPage extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Container(width: 16, height: 16, color: color),
+          Container(width: 16, height: 16, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
           const SizedBox(width: 10),
           Text(text, style: const TextStyle(fontSize: 14)),
         ],
       ),
-    );
-  }
-
-  Widget _buildDropdown(String label, {bool isDate = false}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 5),
-        Container(
-          width: 200,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: BoxDecoration(
-            color: const Color(0xFFE3E8FF),
-            border: Border.all(color: Colors.black26),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                "v",
-                style: TextStyle(color: Colors.transparent),
-              ), // Spacing
-              Icon(isDate ? Icons.calendar_month : Icons.keyboard_arrow_down),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }
