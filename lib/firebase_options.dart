@@ -42,42 +42,6 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions web = FirebaseOptions(
     apiKey: 'AIzaSyDoYT_Bc5RYcLfQIJ0-ZjRo4XTIITaeHRk',
-    appId: '1:1073140207576:web:fa3f75486a0b80b866ecad',
-    messagingSenderId: '1073140207576',
-    projectId: 'attendease-4f20e',
-    authDomain: 'attendease-4f20e.firebaseapp.com',
-    storageBucket: 'attendease-4f20e.firebasestorage.app',
-    measurementId: 'G-ZE5QBT8CE0',
-  );
-
-  static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAd1ntHMhRM6EAkwFawDjLU4LPS_tmcSZY',
-    appId: '1:1073140207576:android:fcfe055e4e5566e366ecad',
-    messagingSenderId: '1073140207576',
-    projectId: 'attendease-4f20e',
-    storageBucket: 'attendease-4f20e.firebasestorage.app',
-  );
-
-  static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyDJfzOloTdciFnceuNsX__UDaSlQ7D-hxU',
-    appId: '1:1073140207576:ios:be1c64cdee03347e66ecad',
-    messagingSenderId: '1073140207576',
-    projectId: 'attendease-4f20e',
-    storageBucket: 'attendease-4f20e.firebasestorage.app',
-    iosBundleId: 'com.example.attendeaseApp',
-  );
-
-  static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyDJfzOloTdciFnceuNsX__UDaSlQ7D-hxU',
-    appId: '1:1073140207576:ios:be1c64cdee03347e66ecad',
-    messagingSenderId: '1073140207576',
-    projectId: 'attendease-4f20e',
-    storageBucket: 'attendease-4f20e.firebasestorage.app',
-    iosBundleId: 'com.example.attendeaseApp',
-  );
-
-  static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyDoYT_Bc5RYcLfQIJ0-ZjRo4XTIITaeHRk',
     appId: '1:1073140207576:web:1e8a03415157be9966ecad',
     messagingSenderId: '1073140207576',
     projectId: 'attendease-4f20e',
@@ -85,4 +49,41 @@ class DefaultFirebaseOptions {
     storageBucket: 'attendease-4f20e.firebasestorage.app',
     measurementId: 'G-VF2XDTQ9SB',
   );
+
+  static const FirebaseOptions android = FirebaseOptions(
+    apiKey: 'AIzaSyAd1ntHMhRM6EAkwFawDjLU4LPS_tmcSZY',
+    appId: '1:1073140207576:android:7dcb19d253b21c4a66ecad',
+    messagingSenderId: '1073140207576',
+    projectId: 'attendease-4f20e',
+    storageBucket: 'attendease-4f20e.firebasestorage.app',
+  );
+
+  static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: 'AIzaSyDJfzOloTdciFnceuNsX__UDaSlQ7D-hxU',
+    appId: '1:1073140207576:ios:74a385581ec4d60366ecad',
+    messagingSenderId: '1073140207576',
+    projectId: 'attendease-4f20e',
+    storageBucket: 'attendease-4f20e.firebasestorage.app',
+    iosBundleId: 'com.example.adminattendease',
+  );
+
+  static const FirebaseOptions macos = FirebaseOptions(
+    apiKey: 'AIzaSyDJfzOloTdciFnceuNsX__UDaSlQ7D-hxU',
+    appId: '1:1073140207576:ios:74a385581ec4d60366ecad',
+    messagingSenderId: '1073140207576',
+    projectId: 'attendease-4f20e',
+    storageBucket: 'attendease-4f20e.firebasestorage.app',
+    iosBundleId: 'com.example.adminattendease',
+  );
+
+  static const FirebaseOptions windows = FirebaseOptions(
+    apiKey: 'AIzaSyDoYT_Bc5RYcLfQIJ0-ZjRo4XTIITaeHRk',
+    appId: '1:1073140207576:web:1c319dd126dd725166ecad',
+    messagingSenderId: '1073140207576',
+    projectId: 'attendease-4f20e',
+    authDomain: 'attendease-4f20e.firebaseapp.com',
+    storageBucket: 'attendease-4f20e.firebasestorage.app',
+    measurementId: 'G-SJ88MEG3YY',
+  );
+
 }

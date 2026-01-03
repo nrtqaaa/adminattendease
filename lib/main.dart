@@ -1,18 +1,16 @@
-import 'package:adminattendease/admin/login/pages/daily_attendance_view.dart';
-import 'package:adminattendease/admin/login/pages/leavebalance.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 
-// Import your pages
+// Import your pages using relative paths
 import 'admin/login/pages/login.dart'; 
-import 'admin/login/pages/register.dart';
-import 'admin/login/pages/dashboard.dart'; 
+import 'admin/login/pages/dashboard.dart'; // Ensure this file has DashboardContent
 import 'admin/login/pages/employeelist.dart';
+import 'admin/login/pages/daily_attendance_view.dart';
 import 'admin/login/pages/manual_attendance.dart';
 import 'admin/login/pages/leaverequest.dart';
-import 'admin/login/pages/claim_management.dart';
+import 'admin/login/pages/leavebalance.dart'; 
 import 'admin/login/pages/payslip_management.dart'; 
 import 'admin/login/pages/monthly_report.dart';
 import 'admin/login/pages/system_config.dart';
@@ -55,7 +53,7 @@ class AuthWrapper extends StatelessWidget {
         if (snapshot.hasData) {
           return const AdminDashboard();
         }
-        return const LoginPage(); // Shows professional login by default
+        return const LoginPage(); 
       },
     );
   }
@@ -71,18 +69,17 @@ class AdminDashboard extends StatefulWidget {
 class _AdminDashboardState extends State<AdminDashboard> {
   int _selectedIndex = 0;
 
-  // Sync these indices exactly with the NavigationRail below
+  // FIX: Replaced AdminDashboard() with DashboardContent() to avoid infinite loop
   final List<Widget> _pages = [
-    const AdminDashboard(),
-    const EmployeeList(),          // 1
+    const DashboardContent(), // This should be defined in dashboard.dart
+    const EmployeeList(),
     const DailyAttendancePage(),
-    const ManualAttendancePage(),  // 2
-    const LeaveRequestPage(),      // 3
-    const LeaveBalancePage(), 
-    const ClaimManagementPage(),   // 4
-    const PayslipManagementPage(), // 5
-    const MonthlyReportPage(),     // 6
-    const SystemConfigPage(),      // 7
+    const ManualAttendancePage(),
+    const LeaveRequestPage(),
+    const LeaveBalancePage(),
+    const PayslipManagementPage(),
+    const MonthlyReportPage(),
+    const SystemConfigPage(),
   ];
 
   @override
@@ -101,11 +98,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
             destinations: const [
               NavigationRailDestination(icon: Icon(Icons.dashboard), label: Text('Dashboard')),
               NavigationRailDestination(icon: Icon(Icons.people), label: Text('Employees')),
-              NavigationRailDestination(icon: Icon(Icons.punch_clock_outlined), label: Text('Attendance')),
-               NavigationRailDestination(icon: Icon(Icons.punch_clock_outlined), label: Text('Manual')),
-              NavigationRailDestination(icon: Icon(Icons.calendar_month), label: Text('Leaves Requests')),
+              NavigationRailDestination(icon: Icon(Icons.calendar_today), label: Text('Attendance')),
+              NavigationRailDestination(icon: Icon(Icons.edit_calendar), label: Text('Manual')),
+              NavigationRailDestination(icon: Icon(Icons.mail_outline), label: Text('Leave Requests')),
               NavigationRailDestination(icon: Icon(Icons.account_balance), label: Text('Leave Balance')),
-              NavigationRailDestination(icon: Icon(Icons.payments), label: Text('Claims')),
               NavigationRailDestination(icon: Icon(Icons.account_balance_wallet), label: Text('Payroll')),
               NavigationRailDestination(icon: Icon(Icons.bar_chart), label: Text('Reports')),
               NavigationRailDestination(icon: Icon(Icons.settings), label: Text('Settings')),
