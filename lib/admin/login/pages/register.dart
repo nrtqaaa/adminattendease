@@ -70,10 +70,12 @@ class _RegisterPageState extends State<RegisterPage> {
                         text: const TextSpan(
                           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontStyle: FontStyle.italic),
                           children: [
-                            TextSpan(text: "Data", style: TextStyle(color: Colors.blue)),
+                            TextSpan(text: "Data", style: TextStyle(color: Color.fromARGB(255, 7, 28, 135))),
                             TextSpan(text: "Solutions ", style: TextStyle(color: Colors.black)),
                             TextSpan(text: "(", style: TextStyle(color: Colors.black)),
-                            TextSpan(text: "Sarawak", style: TextStyle(color: Colors.yellow)),
+                            TextSpan(text: "Sa", style: TextStyle(color: Colors.yellow)),
+                            TextSpan(text: "ra", style: TextStyle(color: Colors.black)),
+                            TextSpan(text: "wak", style: TextStyle(color: Colors.red)),
                             TextSpan(text: ")", style: TextStyle(color: Colors.black)),
                           ],
                         ),
