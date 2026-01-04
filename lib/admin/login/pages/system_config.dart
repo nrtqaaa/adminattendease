@@ -9,12 +9,14 @@ class SystemConfigPage extends StatefulWidget {
 }
 
 class _SystemConfigPageState extends State<SystemConfigPage> {
+  // Controllers for editing
   final TextEditingController _radiusController = TextEditingController();
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _idController = TextEditingController();
   
-  String adminName = "Loading...";
-  String adminEmail = "Loading...";
-  String adminID = "...";
-  
+  bool isEditing = false; // Toggle for edit mode
+  bool isSaving = false;
+
   bool geofenceOn = true;
   bool pushNotify = true;
   bool emailNotify = true;
@@ -32,22 +34,14 @@ class _SystemConfigPageState extends State<SystemConfigPage> {
     if (user != null) {
       try {
         final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-        if (doc.exists) {
+        if (doc.exists && mounted) {
           setState(() {
-            adminName = doc['name'] ?? "No Name";
-            adminEmail = user.email ?? "No Email";
-            adminID = doc['employeeID'] ?? "AD-${user.uid.substring(0, 4)}";
-          });
-        } else {
-          // Fallback if document doesn't exist in Firestore yet
-          setState(() {
-            adminName = "Profile Missing";
-            adminEmail = user.email ?? "No Email";
-            adminID = "NEW_USER";
+            _nameController.text = doc['name'] ?? "";
+            _idController.text = doc['employeeID'] ?? "AD-${user.uid.substring(0, 4)}";
           });
         }
       } catch (e) {
-        setState(() { adminName = "Error Loading"; });
+        debugPrint("Error loading user: $e");
       }
     }
   }
@@ -61,6 +55,32 @@ class _SystemConfigPageState extends State<SystemConfigPage> {
         });
       }
     });
+  }
+
+  // FUNCTION TO SAVE UPDATED PROFILE TO FIREBASE
+  Future<void> _saveProfile() async {
+    final User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    setState(() => isSaving = true);
+
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+        'name': _nameController.text.trim(),
+        'employeeID': _idController.text.trim(),
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Profile updated successfully!")),
+      );
+      setState(() => isEditing = false);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Failed to update: $e")),
+      );
+    } finally {
+      setState(() => isSaving = false);
+    }
   }
 
   @override
@@ -115,7 +135,24 @@ class _SystemConfigPageState extends State<SystemConfigPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("Admin Profile", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          Row(
+            children: [
+              const Text("Admin Profile", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(width: 20),
+              // EDIT / SAVE BUTTON
+              IconButton(
+                icon: Icon(isEditing ? Icons.check_circle : Icons.edit, color: Colors.blueGrey),
+                onPressed: () {
+                  if (isEditing) {
+                    _saveProfile();
+                  } else {
+                    setState(() => isEditing = true);
+                  }
+                },
+              ),
+              if (isSaving) const SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 2)),
+            ],
+          ),
           const SizedBox(height: 20),
           Row(
             children: [
@@ -123,12 +160,42 @@ class _SystemConfigPageState extends State<SystemConfigPage> {
               const SizedBox(width: 20),
               Column(
                 children: [
-                  _buildProfileField("ID", adminID),
-                  _buildProfileField("Name", adminName),
-                  _buildProfileField("Email", adminEmail),
+                  _buildProfileField("ID", _idController, isEditing),
+                  _buildProfileField("Name", _nameController, isEditing),
+                  _buildProfileField("Email", TextEditingController(text: FirebaseAuth.instance.currentUser?.email ?? ""), false), // Email usually locked
                 ],
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfileField(String label, TextEditingController controller, bool enabled) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+          Container(
+            width: 200,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+            decoration: BoxDecoration(
+              color: enabled ? Colors.white : Colors.grey[200], 
+              borderRadius: BorderRadius.circular(8), 
+              boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)]
+            ),
+            child: TextField(
+              controller: controller,
+              enabled: enabled,
+              style: const TextStyle(fontSize: 12),
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                isDense: true,
+              ),
+            ),
           ),
         ],
       ),
@@ -171,29 +238,16 @@ class _SystemConfigPageState extends State<SystemConfigPage> {
             Container(
               width: 80,
               decoration: BoxDecoration(border: Border.all(color: Colors.grey), color: Colors.white),
-              child: TextField(controller: _radiusController, textAlign: TextAlign.center, decoration: const InputDecoration(border: InputBorder.none)),
+              child: TextField(
+                controller: _radiusController, 
+                textAlign: TextAlign.center, 
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(border: InputBorder.none)
+              ),
             ),
           ],
         ),
       ],
-    );
-  }
-
-  Widget _buildProfileField(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
-          Container(
-            width: 200,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)]),
-            child: Text(value, style: const TextStyle(fontSize: 12)),
-          ),
-        ],
-      ),
     );
   }
 

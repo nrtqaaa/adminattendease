@@ -22,7 +22,6 @@ class _MonthlyReportPageState extends State<MonthlyReportPage> {
   int totalLate = 0;
   int totalLeave = 0;
   int missedCheckIns = 0;
-  int totalClaims = 0;
   bool _isLoading = true;
 
   @override
@@ -114,7 +113,6 @@ class _MonthlyReportPageState extends State<MonthlyReportPage> {
                           _buildStatCard("Total Late", totalLate.toString()),
                           _buildStatCard("Total Leave", totalLeave.toString()),
                           _buildStatCard("Missed Check-ins", missedCheckIns.toString()),
-                          _buildStatCard("Total Claims", totalClaims.toString()),
                         ],
                       ),
                       const SizedBox(height: 40),
