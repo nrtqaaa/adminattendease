@@ -32,7 +32,7 @@ class LeaveDetailsPage extends StatelessWidget {
 
     try {
       // 1. Update the Leave Request Status
-      await firestore.collection('leaveRequests').doc(requestId).update({
+      await firestore.collection('leaves').doc(requestId).update({
         'status': newStatus,
         'processedAt': FieldValue.serverTimestamp(),
       });

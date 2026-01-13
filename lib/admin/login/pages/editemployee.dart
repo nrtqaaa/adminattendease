@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class EditEmployeePage extends StatefulWidget {
-  final String id;
+  final String id; // This is the Document ID from Firestore
   final String name;
   final String email;
   final String department;
@@ -22,7 +22,6 @@ class EditEmployeePage extends StatefulWidget {
 class _EditEmployeePageState extends State<EditEmployeePage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   
-  // 1. Controllers to handle user input
   late TextEditingController _fNameController;
   late TextEditingController _lNameController;
   late TextEditingController _emailController;
@@ -36,18 +35,16 @@ class _EditEmployeePageState extends State<EditEmployeePage> {
   @override
   void initState() {
     super.initState();
-    // Logic to split "Alice Wong" into First and Last names
     List<String> names = widget.name.split(" ");
     String fName = names.isNotEmpty ? names.first : "";
     String lName = names.length > 1 ? names.sublist(1).join(" ") : "";
 
-    // 2. Initialize controllers with existing data
     _fNameController = TextEditingController(text: fName);
     _lNameController = TextEditingController(text: lName);
     _emailController = TextEditingController(text: widget.email);
-    _deptController = TextEditingController(text: widget.department);
-    _phoneController = TextEditingController(text: "0123456789"); // Default placeholder
-    _positionController = TextEditingController(text: "Employee"); // Default placeholder
+    _deptController = TextEditingController(text: widget.department == "N/A" ? "" : widget.department);
+    _phoneController = TextEditingController(text: "0123456789"); 
+    _positionController = TextEditingController(text: "Employee"); 
   }
 
   @override
@@ -61,13 +58,14 @@ class _EditEmployeePageState extends State<EditEmployeePage> {
     super.dispose();
   }
 
-  // 3. DATABASE LOGIC: Update Employee in Firestore
+  // --- DATABASE LOGIC: FIXED TO TARGET 'users' COLLECTION ---
   Future<void> _updateEmployee() async {
     setState(() => _isLoading = true);
     try {
       String fullName = "${_fNameController.text.trim()} ${_lNameController.text.trim()}";
       
-      await _firestore.collection('employees').doc(widget.id).update({
+      // FIXED: Changed collection from 'employees' to 'users'
+      await _firestore.collection('users').doc(widget.id).update({
         'name': fullName,
         'email': _emailController.text.trim(),
         'department': _deptController.text.trim(),
@@ -80,13 +78,19 @@ class _EditEmployeePageState extends State<EditEmployeePage> {
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Profile for $fullName updated successfully!")),
+          SnackBar(
+            content: Text("Profile for $fullName updated successfully!"),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
-      );
+      debugPrint("Update Error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -188,7 +192,8 @@ class _EditEmployeePageState extends State<EditEmployeePage> {
       children: [
         const Text('Personal Information', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0B1D4D))),
         const SizedBox(height: 20),
-        _buildField("Employee ID (ReadOnly)", TextEditingController(text: widget.id), enabled: false),
+        // This displays the Firestore Doc ID (ReadOnly)
+        _buildField("Firestore Doc ID (ReadOnly)", TextEditingController(text: widget.id), enabled: false),
         _buildField("First Name", _fNameController),
         _buildField("Last Name", _lNameController),
         _buildField("Email Address", _emailController),
@@ -238,8 +243,6 @@ class _EditEmployeePageState extends State<EditEmployeePage> {
       ),
     );
   }
-
-  // --- REUSABLE COMPONENTS ---
 
   Widget _buildField(String label, TextEditingController controller, {bool enabled = true}) {
     return Padding(
