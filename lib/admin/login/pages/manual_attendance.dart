@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // 1. Add Firestore
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ManualAttendancePage extends StatefulWidget {
   const ManualAttendancePage({super.key});
@@ -17,47 +17,64 @@ class _ManualAttendancePageState extends State<ManualAttendancePage> {
 
   bool _isSearching = false;
 
-  // 2. LOGIC: Auto-fill Name from Employee ID
+  // --- LOGIC: Auto-fill Name from Employee ID ---
   Future<void> _lookupEmployee(String id) async {
-    if (id.length < 3) return; // Wait for a few characters
+    if (id.isEmpty) {
+      setState(() => _nameController.clear());
+      return;
+    }
+    
     setState(() => _isSearching = true);
     
     try {
-      var doc = await FirebaseFirestore.instance.collection('employees').doc(id).get();
-      if (doc.exists) {
+      // FIXED: Queries 'users' collection where 'employeeId' field matches
+      var querySnapshot = await FirebaseFirestore.instance
+          .collection('users') 
+          .where('employeeId', isEqualTo: id.trim())
+          .get();
+
+      if (querySnapshot.docs.isNotEmpty) {
+        var userData = querySnapshot.docs.first.data();
         setState(() {
-          _nameController.text = doc.data()?['name'] ?? "";
+          _nameController.text = userData['name'] ?? "";
+        });
+      } else {
+        setState(() {
+          _nameController.text = "Employee not found";
         });
       }
+    } catch (e) {
+      debugPrint("Lookup failed: $e");
     } finally {
       setState(() => _isSearching = false);
     }
   }
 
-  // 3. LOGIC: Save to Firebase
+  // --- LOGIC: Save to Firebase ---
   Future<void> _handleSave() async {
-    if (_idController.text.isEmpty || _nameController.text.isEmpty || _dateController.text.isEmpty) {
+    if (_idController.text.isEmpty || _nameController.text.isEmpty || _nameController.text == "Employee not found" || _dateController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please fill in required fields"), backgroundColor: Colors.orange),
+        const SnackBar(content: Text("Please provide a valid Employee ID and Date"), backgroundColor: Colors.orange),
       );
       return;
     }
 
     try {
-      await FirebaseFirestore.instance.collection('manual_attendance').add({
-        'employeeId': _idController.text,
-        'name': _nameController.text,
+      // UPDATED: Points to 'attendance_logs' collection
+      await FirebaseFirestore.instance.collection('attendance_logs').add({
+        'employeeId': _idController.text.trim(),
+        'name': _nameController.text.trim(),
         'date': _dateController.text,
         'clockIn': _inTimeController.text,
         'clockOut': _outTimeController.text,
         'duration': _calculateDuration(),
+        'status': 'PENDING', // Default status based on DB structure
         'createdAt': FieldValue.serverTimestamp(),
-        'addedBy': 'Admin', // You can replace this with actual logged-in admin name
       });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Attendance record saved to database!"), backgroundColor: Colors.green),
+          const SnackBar(content: Text("Attendance record saved!"), backgroundColor: Colors.green),
         );
         _clearForm();
       }
@@ -76,7 +93,9 @@ class _ManualAttendancePageState extends State<ManualAttendancePage> {
     });
   }
 
-  // --- EXISTING DURATION LOGIC ---
+  // --- UI AND HELPER METHODS ---
+  // (Duration logic and Pickers remain the same as your previous version)
+
   String _calculateDuration() {
     if (_inTimeController.text.isEmpty || _outTimeController.text.isEmpty) return "0h 0m";
     try {
@@ -104,7 +123,6 @@ class _ManualAttendancePageState extends State<ManualAttendancePage> {
     return TimeOfDay.now();
   }
 
-  // --- PICKERS ---
   Future<void> _selectDate() async {
     DateTime? picked = await showDatePicker(
       context: context,
@@ -135,7 +153,6 @@ class _ManualAttendancePageState extends State<ManualAttendancePage> {
           children: [
             const Text("Attendance / Manual Entry", style: TextStyle(fontSize: 16, color: Colors.grey)),
             const SizedBox(height: 24),
-
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(32),
@@ -149,43 +166,32 @@ class _ManualAttendancePageState extends State<ManualAttendancePage> {
                 children: [
                   const Text("Manual Attendance Entry Form", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF0B1D4D))),
                   const Divider(height: 40),
-
                   const Text("EMPLOYEE INFORMATION", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
                   const SizedBox(height: 20),
-                  
-                  // ID Field with Auto-fill Trigger
                   _buildFormRow("Employee ID:", TextField(
                     controller: _idController,
                     onChanged: _lookupEmployee,
                     decoration: InputDecoration(
-                      hintText: "e.g. EMP001",
+                      hintText: "e.g. EMP123", // Matches example
                       suffixIcon: _isSearching ? const SizedBox(width: 20, height: 20, child: Padding(padding: EdgeInsets.all(10), child: CircularProgressIndicator(strokeWidth: 2))) : null,
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                     ),
                   )),
-
                   _buildFormRow("Full Name:", _buildTextField(_nameController, "Name will auto-fill", readOnly: true)),
-
                   const SizedBox(height: 20),
                   const Divider(),
                   const SizedBox(height: 20),
-
                   const Text("ATTENDANCE DETAILS", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
                   const SizedBox(height: 20),
                   _buildFormRow("Date:", _buildPickerField(_dateController, "Select Date", Icons.calendar_today, _selectDate)),
                   _buildFormRow("Clock-In:", _buildPickerField(_inTimeController, "Select Time", Icons.access_time, () => _selectTime(_inTimeController))),
                   _buildFormRow("Clock-Out:", _buildPickerField(_outTimeController, "Select Time", Icons.access_time, () => _selectTime(_outTimeController))),
-
                   const SizedBox(height: 30),
-                  
-                  // Duration Display
                   Center(child: _buildDurationBadge()),
                 ],
               ),
             ),
-
             const SizedBox(height: 40),
-
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -200,7 +206,7 @@ class _ManualAttendancePageState extends State<ManualAttendancePage> {
     );
   }
 
-  // --- HELPERS ---
+  // --- UI HELPERS ---
   Widget _buildFormRow(String label, Widget input) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),

@@ -89,7 +89,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 const SizedBox(height: 30),
 
                 // --- USERNAME / FULL NAME FIELD ---
-                const Text("Username", style: TextStyle(fontWeight: FontWeight.w500)),
+                const Text("Fullname", style: TextStyle(fontWeight: FontWeight.w500)),
                 const SizedBox(height: 8),
                 _buildInputField(_nameController, "Enter your name"),
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 
 class DashboardContent extends StatefulWidget {
   const DashboardContent({super.key});
@@ -10,6 +11,15 @@ class DashboardContent extends StatefulWidget {
 }
 
 class _DashboardContentState extends State<DashboardContent> {
+  
+  // Helper to convert Firestore Timestamp to String
+  String _formatTimestamp(dynamic timestamp) {
+    if (timestamp is Timestamp) {
+      return DateFormat('MMM dd, yyyy').format(timestamp.toDate());
+    }
+    return timestamp?.toString() ?? 'N/A';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -54,42 +64,47 @@ class _DashboardContentState extends State<DashboardContent> {
 
   // --- DYNAMIC STATISTICS CARDS ---
   Widget _buildStatCards() {
+    String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        // Change "users" to "employees" if your employee list is in that collection
+        // 1. Total Employees
         _dynamicStatCard("Total Employees", "users", Icons.groups_outlined, Colors.blue),
         
+        // 2. Present Today (Filters by 'present' and current date)
         _dynamicStatCard(
           "Present Today", 
           "attendance", 
           Icons.check_circle_outline, 
           Colors.green,
-          query: (ref) => ref.where('status', isEqualTo: 'present'),
+          query: (ref) => ref.where('status', isEqualTo: 'present').where('date', isEqualTo: today),
         ),
         
+        // 3. Pending Leave Requests
         _dynamicStatCard(
           "Leave Requests", 
-          "leave_requests", 
+          "leaves", 
           Icons.warning_amber_rounded, 
           Colors.orange,
-          query: (ref) => ref.where('status', isEqualTo: 'pending'),
+          query: (ref) => ref.where('status', isEqualTo: 'Pending'),
         ),
 
-        // Logic for Absent: Usually Total Employees - Present Today
-        _buildAbsentCard(),
+        // 4. Absent Today calculation
+        _buildAbsentCard(today),
       ],
     );
   }
 
-  // SPECIAL CARD FOR ABSENT TODAY (Calculation)
-  Widget _buildAbsentCard() {
+  Widget _buildAbsentCard(String today) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('users').snapshots(),
       builder: (context, userSnap) {
         return StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance.collection('attendance')
-              .where('status', isEqualTo: 'present').snapshots(),
+              .where('status', isEqualTo: 'present')
+              .where('date', isEqualTo: today)
+              .snapshots(),
           builder: (context, attSnap) {
             int total = userSnap.hasData ? userSnap.data!.docs.length : 0;
             int present = attSnap.hasData ? attSnap.data!.docs.length : 0;
@@ -103,7 +118,6 @@ class _DashboardContentState extends State<DashboardContent> {
     );
   }
 
-  // Helper Widget for Stream-based Counts
   Widget _dynamicStatCard(String label, String collection, IconData icon, Color color, {Query Function(CollectionReference)? query}) {
     CollectionReference colRef = FirebaseFirestore.instance.collection(collection);
     Stream<QuerySnapshot> stream = (query != null) ? query(colRef).snapshots() : colRef.snapshots();
@@ -111,7 +125,6 @@ class _DashboardContentState extends State<DashboardContent> {
     return StreamBuilder<QuerySnapshot>(
       stream: stream,
       builder: (context, snapshot) {
-        if (snapshot.hasError) return _statCard(label, "Err", icon, color);
         String value = (snapshot.hasData) ? snapshot.data!.docs.length.toString() : "...";
         return _statCard(label, value, icon, color);
       },
@@ -123,23 +136,25 @@ class _DashboardContentState extends State<DashboardContent> {
       width: 180,
       padding: const EdgeInsets.symmetric(vertical: 20),
       decoration: BoxDecoration(
-        color: const Color(0xFFD9D9D9), 
+        color: Colors.white, 
         borderRadius: BorderRadius.circular(12),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]
       ),
       child: Column(
         children: [
           Icon(icon, color: color, size: 32),
           const SizedBox(height: 8),
           Text(value, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
-          Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500)),
+          Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: Colors.grey)),
         ],
       ),
     );
   }
 
-  // --- DYNAMIC PENDING LEAVE SECTION ---
+  // --- SYNCED PENDING LEAVE SECTION ---
   Widget _buildPendingLeaveSection() {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -153,8 +168,8 @@ class _DashboardContentState extends State<DashboardContent> {
           const SizedBox(height: 16),
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
-                .collection('leave_requests')
-                .where('status', isEqualTo: 'pending')
+                .collection('leaves')
+                .where('status', isEqualTo: 'Pending')
                 .snapshots(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
@@ -170,11 +185,14 @@ class _DashboardContentState extends State<DashboardContent> {
               return Column(
                 children: snapshot.data!.docs.map((doc) {
                   final data = doc.data() as Map<String, dynamic>;
+                  String dateRange = "${_formatTimestamp(data['from'])} - ${_formatTimestamp(data['to'])}";
+
                   return _leaveRequestItem(
                     doc.id,
-                    data['employeeName'] ?? 'Unknown',
-                    data['leaveType'] ?? 'General',
-                    data['dateRange'] ?? 'N/A',
+                    data['name'] ?? 'Unknown',
+                    data['type'] ?? 'Leave',
+                    dateRange,
+                    data['userId'] ?? '',
                   );
                 }).toList(),
               );
@@ -185,7 +203,7 @@ class _DashboardContentState extends State<DashboardContent> {
     );
   }
 
-  Widget _leaveRequestItem(String docId, String name, String type, String date) {
+  Widget _leaveRequestItem(String docId, String name, String type, String date, String uid) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Row(
@@ -195,34 +213,53 @@ class _DashboardContentState extends State<DashboardContent> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                Text(type, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                Text(date, style: const TextStyle(color: Colors.grey, fontSize: 10)),
+                Text(type, style: const TextStyle(color: Colors.blueGrey, fontSize: 12)),
+                Text(date, style: const TextStyle(color: Colors.grey, fontSize: 11)),
               ],
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.check_box, color: Color(0xFF90EE90), size: 30),
-            onPressed: () => _updateLeaveStatus(docId, 'approved'),
+            icon: const Icon(Icons.check_circle, color: Colors.green, size: 28),
+            onPressed: () => _updateLeaveStatus(docId, uid, 'approved'),
           ),
-          const SizedBox(width: 8),
           IconButton(
-            icon: const Icon(Icons.cancel, color: Color(0xFFFF6961), size: 30),
-            onPressed: () => _updateLeaveStatus(docId, 'rejected'),
+            icon: const Icon(Icons.cancel, color: Colors.red, size: 28),
+            onPressed: () => _updateLeaveStatus(docId, uid, 'rejected'),
           ),
         ],
       ),
     );
   }
 
-  // Helper to handle Firestore updates
-  Future<void> _updateLeaveStatus(String docId, String status) async {
+  // --- FIRESTORE UPDATE + NOTIFICATION LOGIC ---
+  Future<void> _updateLeaveStatus(String docId, String staffUid, String status) async {
     try {
-      await FirebaseFirestore.instance
-          .collection('leave_requests')
-          .doc(docId)
-          .update({'status': status});
+      final batch = FirebaseFirestore.instance.batch();
+
+      // 1. Update Leave doc
+      batch.update(FirebaseFirestore.instance.collection('leaves').doc(docId), {'status': status});
+
+      // 2. Add Notification doc
+      if (staffUid.isNotEmpty) {
+        batch.set(FirebaseFirestore.instance.collection('notifications').doc(), {
+          'userId': staffUid,
+          'title': 'Leave Request ${status[0].toUpperCase()}${status.substring(1)}',
+          'message': 'Your leave request has been $status.',
+          'timestamp': FieldValue.serverTimestamp(),
+          'read': false,
+          'type': 'leave_status'
+        });
+      }
+
+      await batch.commit();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Request $status successfully"), backgroundColor: status == 'approved' ? Colors.green : Colors.red)
+        );
+      }
     } catch (e) {
-      debugPrint("Error updating leave: $e");
+      debugPrint("Error: $e");
     }
   }
 }

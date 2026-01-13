@@ -84,7 +84,7 @@ class _LeaveBalancePageState extends State<LeaveBalancePage> {
                   Expanded(
                     // 3. LIVE STREAM: Fetching from Firestore
                     child: StreamBuilder<QuerySnapshot>(
-                      stream: FirebaseFirestore.instance.collection('employees').snapshots(),
+                      stream: FirebaseFirestore.instance.collection('users').snapshots(),
                       builder: (context, snapshot) {
                         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
 
